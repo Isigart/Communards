@@ -1,0 +1,672 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Enquête — Repas du personnel</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap');
+
+  :root {
+    --orange: #E07B2A;
+    --orange-light: #FFF5EB;
+    --orange-mid: #F5DFC0;
+    --dark: #1A1208;
+    --mid: #6B5A42;
+    --light: #FAF6F1;
+    --white: #FFFFFF;
+    --border: #E8DDD0;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--light);
+    color: var(--dark);
+    min-height: 100vh;
+  }
+
+  .header {
+    background: var(--orange);
+    padding: 32px 24px 28px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .header::before {
+    content: '';
+    position: absolute;
+    top: -40px; right: -40px;
+    width: 160px; height: 160px;
+    background: rgba(255,255,255,0.08);
+    border-radius: 50%;
+  }
+
+  .header::after {
+    content: '';
+    position: absolute;
+    bottom: -20px; left: 30%;
+    width: 80px; height: 80px;
+    background: rgba(255,255,255,0.05);
+    border-radius: 50%;
+  }
+
+  .header-label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.7);
+    margin-bottom: 8px;
+  }
+
+  .header h1 {
+    font-family: 'DM Serif Display', serif;
+    font-size: 26px;
+    color: white;
+    line-height: 1.2;
+    margin-bottom: 12px;
+  }
+
+  .header p {
+    font-size: 14px;
+    color: rgba(255,255,255,0.85);
+    line-height: 1.5;
+    font-weight: 300;
+  }
+
+  .progress-bar {
+    height: 3px;
+    background: rgba(255,255,255,0.2);
+    margin-top: 20px;
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  .progress-fill {
+    height: 100%;
+    background: white;
+    border-radius: 2px;
+    transition: width 0.4s ease;
+    width: 0%;
+  }
+
+  .container {
+    max-width: 480px;
+    margin: 0 auto;
+    padding: 0 16px 80px;
+  }
+
+  .section {
+    display: none;
+    animation: fadeIn 0.3s ease;
+  }
+
+  .section.active { display: block; }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .section-header {
+    padding: 28px 0 4px;
+  }
+
+  .section-number {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--orange);
+    margin-bottom: 6px;
+  }
+
+  .section-title {
+    font-family: 'DM Serif Display', serif;
+    font-size: 20px;
+    color: var(--dark);
+    line-height: 1.3;
+  }
+
+  .question-block {
+    margin-top: 24px;
+  }
+
+  .question-label {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--dark);
+    margin-bottom: 10px;
+    line-height: 1.4;
+  }
+
+  .question-label .required {
+    color: var(--orange);
+    margin-left: 2px;
+  }
+
+  /* Chip selects */
+  .chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .chip {
+    padding: 8px 14px;
+    border: 1.5px solid var(--border);
+    border-radius: 100px;
+    font-size: 13px;
+    font-weight: 400;
+    color: var(--mid);
+    cursor: pointer;
+    background: var(--white);
+    transition: all 0.15s ease;
+    user-select: none;
+  }
+
+  .chip:hover {
+    border-color: var(--orange);
+    color: var(--orange);
+  }
+
+  .chip.selected {
+    background: var(--orange);
+    border-color: var(--orange);
+    color: white;
+    font-weight: 500;
+  }
+
+  /* Text inputs */
+  textarea, input[type="text"] {
+    width: 100%;
+    padding: 14px;
+    border: 1.5px solid var(--border);
+    border-radius: 12px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    color: var(--dark);
+    background: var(--white);
+    resize: none;
+    outline: none;
+    transition: border-color 0.15s;
+    line-height: 1.5;
+  }
+
+  textarea:focus, input[type="text"]:focus {
+    border-color: var(--orange);
+  }
+
+  textarea::placeholder, input::placeholder {
+    color: #BEB0A0;
+  }
+
+  /* Divider */
+  .divider {
+    height: 1px;
+    background: var(--border);
+    margin: 28px 0 0;
+  }
+
+  /* Nav buttons */
+  .nav-wrapper {
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    background: var(--white);
+    border-top: 1px solid var(--border);
+    padding: 12px 16px;
+    z-index: 100;
+  }
+
+  .nav-inner {
+    max-width: 480px;
+    margin: 0 auto;
+    display: flex;
+    gap: 10px;
+  }
+
+  .btn-back {
+    flex: 0 0 auto;
+    padding: 14px 20px;
+    border: 1.5px solid var(--border);
+    border-radius: 12px;
+    background: transparent;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--mid);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .btn-back:hover { border-color: var(--mid); }
+
+  .btn-next {
+    flex: 1;
+    padding: 14px;
+    background: var(--orange);
+    border: none;
+    border-radius: 12px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    font-weight: 600;
+    color: white;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .btn-next:hover { background: #C96E20; }
+  .btn-next:disabled { background: var(--border); color: var(--mid); cursor: default; }
+
+  /* Success screen */
+  .success {
+    display: none;
+    text-align: center;
+    padding: 60px 24px;
+    animation: fadeIn 0.4s ease;
+  }
+
+  .success.active { display: block; }
+
+  .success-icon {
+    width: 64px; height: 64px;
+    background: var(--orange-light);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 24px;
+    font-size: 28px;
+  }
+
+  .success h2 {
+    font-family: 'DM Serif Display', serif;
+    font-size: 24px;
+    margin-bottom: 12px;
+    color: var(--dark);
+  }
+
+  .success p {
+    font-size: 15px;
+    color: var(--mid);
+    line-height: 1.6;
+  }
+
+  .answers-summary {
+    margin-top: 32px;
+    text-align: left;
+    background: var(--white);
+    border: 1.5px solid var(--border);
+    border-radius: 16px;
+    padding: 20px;
+  }
+
+  .summary-title {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--orange);
+    margin-bottom: 16px;
+  }
+
+  .summary-item {
+    margin-bottom: 14px;
+  }
+
+  .summary-q {
+    font-size: 11px;
+    color: var(--mid);
+    margin-bottom: 3px;
+  }
+
+  .summary-a {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--dark);
+  }
+
+  /* Scale buttons */
+  .scale {
+    display: flex;
+    gap: 6px;
+  }
+
+  .scale-btn {
+    flex: 1;
+    padding: 12px 4px;
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
+    background: var(--white);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--mid);
+    cursor: pointer;
+    text-align: center;
+    transition: all 0.15s;
+  }
+
+  .scale-btn:hover { border-color: var(--orange); color: var(--orange); }
+  .scale-btn.selected { background: var(--orange); border-color: var(--orange); color: white; }
+
+  .scale-labels {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 6px;
+    font-size: 11px;
+    color: var(--mid);
+    padding: 0 2px;
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-label">Enquete — 10 minutes</div>
+  <h1>Le repas du personnel, c'est quoi chez toi ?</h1>
+  <p>Pas de pitch, pas de vente. Juste des vraies questions sur le quotidien en cuisine.</p>
+  <div class="progress-bar">
+    <div class="progress-fill" id="progressFill"></div>
+  </div>
+</div>
+
+<div class="container">
+
+  <!-- Section 0 : Profil -->
+  <div class="section active" id="section-0">
+    <div class="section-header">
+      <div class="section-number">01 — Profil</div>
+      <div class="section-title">Qui t'es dans ce metier ?</div>
+    </div>
+
+    <div class="question-block">
+      <div class="question-label">Ton role <span class="required">*</span></div>
+      <div class="chips" data-name="role" data-multi="false">
+        <div class="chip" data-value="chef">Chef</div>
+        <div class="chip" data-value="cuisinier">Cuisinier</div>
+        <div class="chip" data-value="patron">Patron / Gerant</div>
+        <div class="chip" data-value="patissier">Patissier</div>
+        <div class="chip" data-value="salle">Salle</div>
+        <div class="chip" data-value="autre">Autre</div>
+      </div>
+    </div>
+
+    <div class="question-block">
+      <div class="question-label">Taille de l'etablissement <span class="required">*</span></div>
+      <div class="chips" data-name="taille" data-multi="false">
+        <div class="chip" data-value="1-5">1–5 pers.</div>
+        <div class="chip" data-value="6-15">6–15 pers.</div>
+        <div class="chip" data-value="16-40">16–40 pers.</div>
+        <div class="chip" data-value="+40">+40 pers.</div>
+      </div>
+    </div>
+
+    <div class="question-block">
+      <div class="question-label">Type d'etablissement</div>
+      <div class="chips" data-name="type" data-multi="false">
+        <div class="chip" data-value="brasserie">Brasserie</div>
+        <div class="chip" data-value="gastro">Gastro</div>
+        <div class="chip" data-value="hotel">Hotel-resto</div>
+        <div class="chip" data-value="collectivite">Collectivite</div>
+        <div class="chip" data-value="autre">Autre</div>
+      </div>
+    </div>
+    <div class="divider"></div>
+  </div>
+
+  <!-- Section 1 : Organisation -->
+  <div class="section" id="section-1">
+    <div class="section-header">
+      <div class="section-number">02 — Quotidien</div>
+      <div class="section-title">Comment ca se passe concretement ?</div>
+    </div>
+
+    <div class="question-block">
+      <div class="question-label">Qui s'occupe du repas du personnel ? <span class="required">*</span></div>
+      <div class="chips" data-name="qui" data-multi="false">
+        <div class="chip" data-value="chef">Le chef</div>
+        <div class="chip" data-value="cuisinier">Un cuisinier</div>
+        <div class="chip" data-value="tourne">Ca tourne</div>
+        <div class="chip" data-value="personne">Personne vraiment</div>
+      </div>
+    </div>
+
+    <div class="question-block">
+      <div class="question-label">Comment c'est organise ? <span class="required">*</span></div>
+      <div class="chips" data-name="orga" data-multi="false">
+        <div class="chip" data-value="improvise">Improvise au dernier moment</div>
+        <div class="chip" data-value="planifie">Planifie a l'avance</div>
+        <div class="chip" data-value="restes">On mange les restes</div>
+        <div class="chip" data-value="depend">Ca depend des jours</div>
+      </div>
+    </div>
+
+    <div class="question-block">
+      <div class="question-label">Le budget repas du perso est suivi comment ?</div>
+      <div class="chips" data-name="budget" data-multi="false">
+        <div class="chip" data-value="precis">Precisement</div>
+        <div class="chip" data-value="vague">Vaguement</div>
+        <div class="chip" data-value="jamais">Jamais</div>
+        <div class="chip" data-value="sais-pas">Je sais pas</div>
+      </div>
+    </div>
+
+    <div class="question-block">
+      <div class="question-label">T'as deja eu un clash autour du repas du perso ?</div>
+      <textarea rows="3" id="clash" placeholder="Budget, repetitivite, qui decide, qualite..."></textarea>
+    </div>
+    <div class="divider"></div>
+  </div>
+
+  <!-- Section 2 : Galeres -->
+  <div class="section" id="section-2">
+    <div class="section-header">
+      <div class="section-number">03 — Les galeres</div>
+      <div class="section-title">Ce qui coince vraiment.</div>
+    </div>
+
+    <div class="question-block">
+      <div class="question-label">C'est quoi la principale prise de tete ? <span class="required">*</span></div>
+      <div class="chips" data-name="galere" data-multi="true">
+        <div class="chip" data-value="temps">Manque de temps</div>
+        <div class="chip" data-value="budget">Budget pas clair</div>
+        <div class="chip" data-value="repetitif">C'est repetitif</div>
+        <div class="chip" data-value="stock">Pas de stock adapte</div>
+        <div class="chip" data-value="motivation">Pas motivant a cuisiner</div>
+        <div class="chip" data-value="decision">Qui decide ?</div>
+        <div class="chip" data-value="rien">Pas de probleme</div>
+      </div>
+    </div>
+
+    <div class="question-block">
+      <div class="question-label">Vous utilisez quoi pour vous organiser ?</div>
+      <div class="chips" data-name="outil" data-multi="true">
+        <div class="chip" data-value="whatsapp">WhatsApp</div>
+        <div class="chip" data-value="cahier">Cahier / papier</div>
+        <div class="chip" data-value="tete">De tete</div>
+        <div class="chip" data-value="tableau">Tableau blanc</div>
+        <div class="chip" data-value="rien">Rien</div>
+        <div class="chip" data-value="autre">Autre</div>
+      </div>
+    </div>
+
+    <div class="question-block">
+      <div class="question-label">T'as deja cherche un outil pour ca ?</div>
+      <div class="chips" data-name="cherche" data-multi="false">
+        <div class="chip" data-value="oui">Oui</div>
+        <div class="chip" data-value="non">Non</div>
+        <div class="chip" data-value="pas-pense">Meme pas pense a chercher</div>
+      </div>
+    </div>
+    <div class="divider"></div>
+  </div>
+
+  <!-- Section 3 : Vision -->
+  <div class="section" id="section-3">
+    <div class="section-header">
+      <div class="section-number">04 — Ta vision</div>
+      <div class="section-title">Si ca existait vraiment.</div>
+    </div>
+
+    <div class="question-block">
+      <div class="question-label">Si quelqu'un reglait ce probleme proprement, ca ressemblerait a quoi pour toi ? <span class="required">*</span></div>
+      <textarea rows="5" id="vision" placeholder="Decris avec tes mots, sans filtre..."></textarea>
+    </div>
+
+    <div class="question-block">
+      <div class="question-label">Combien tu paierais par mois pour ca ?</div>
+      <div class="chips" data-name="prix" data-multi="false">
+        <div class="chip" data-value="0">Rien, jamais</div>
+        <div class="chip" data-value="10-20">10–20 €</div>
+        <div class="chip" data-value="20-50">20–50 €</div>
+        <div class="chip" data-value="50+">+50 €</div>
+        <div class="chip" data-value="depends">Ca depend de ce que ca fait</div>
+      </div>
+    </div>
+
+    <div class="question-block">
+      <div class="question-label">Autre chose a ajouter ?</div>
+      <textarea rows="3" id="autre" placeholder="Tout ce qui n'a pas ete couvert..."></textarea>
+    </div>
+    <div class="divider"></div>
+  </div>
+
+  <!-- Success -->
+  <div class="success" id="success">
+    <div class="success-icon">🙏</div>
+    <h2>Merci, vraiment.</h2>
+    <p>Tes reponses sont precieuses. Tu m'as donne 10 minutes de ton temps — c'est exactement ce dont j'avais besoin.</p>
+
+    <div class="answers-summary" id="answersSummary"></div>
+  </div>
+
+</div>
+
+<!-- Navigation -->
+<div class="nav-wrapper" id="navWrapper">
+  <div class="nav-inner">
+    <button class="btn-back" id="btnBack" onclick="prev()" style="display:none">←</button>
+    <button class="btn-next" id="btnNext" onclick="next()">Continuer →</button>
+  </div>
+</div>
+
+<script>
+  const TOTAL_SECTIONS = 4;
+  let current = 0;
+
+  const answers = {
+    role: null, taille: null, type: null,
+    qui: null, orga: null, budget: null, clash: '',
+    galere: [], outil: [], cherche: null,
+    vision: '', prix: null, autre: ''
+  };
+
+  // Chip interaction
+  document.querySelectorAll('.chips').forEach(group => {
+    const isMulti = group.dataset.multi === 'true';
+    const name = group.dataset.name;
+
+    group.querySelectorAll('.chip').forEach(chip => {
+      chip.addEventListener('click', () => {
+        if (isMulti) {
+          chip.classList.toggle('selected');
+          const vals = [...group.querySelectorAll('.chip.selected')].map(c => c.dataset.value);
+          answers[name] = vals;
+        } else {
+          group.querySelectorAll('.chip').forEach(c => c.classList.remove('selected'));
+          chip.classList.add('selected');
+          answers[name] = chip.dataset.value;
+        }
+      });
+    });
+  });
+
+  function updateProgress() {
+    const pct = (current / TOTAL_SECTIONS) * 100;
+    document.getElementById('progressFill').style.width = pct + '%';
+  }
+
+  function showSection(index) {
+    document.querySelectorAll('.section').forEach((s, i) => {
+      s.classList.toggle('active', i === index);
+    });
+    document.getElementById('success').classList.remove('active');
+    document.getElementById('navWrapper').style.display = '';
+
+    document.getElementById('btnBack').style.display = index > 0 ? 'block' : 'none';
+    document.getElementById('btnNext').textContent = index === TOTAL_SECTIONS - 1 ? 'Envoyer ✓' : 'Continuer →';
+    updateProgress();
+    window.scrollTo(0, 0);
+  }
+
+  function next() {
+    // Collect text answers
+    if (current === 1) answers.clash = document.getElementById('clash').value;
+    if (current === 3) {
+      answers.vision = document.getElementById('vision').value;
+      answers.autre = document.getElementById('autre').value;
+    }
+
+    if (current < TOTAL_SECTIONS - 1) {
+      current++;
+      showSection(current);
+    } else {
+      submit();
+    }
+  }
+
+  function prev() {
+    if (current > 0) {
+      current--;
+      showSection(current);
+    }
+  }
+
+  function submit() {
+    document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+    document.getElementById('navWrapper').style.display = 'none';
+    document.getElementById('progressFill').style.width = '100%';
+
+    const success = document.getElementById('success');
+    success.classList.add('active');
+
+    // Build summary
+    const labels = {
+      role: 'Role', taille: 'Etablissement', orga: 'Organisation',
+      galere: 'Principale galere', prix: 'Budget mensuel acceptable',
+      vision: 'Ce que ca ressemblerait'
+    };
+
+    const summary = document.getElementById('answersSummary');
+    let html = '<div class="summary-title">Tes reponses</div>';
+
+    const toShow = ['role', 'taille', 'orga', 'galere', 'prix', 'vision'];
+    toShow.forEach(key => {
+      const val = answers[key];
+      if (!val || (Array.isArray(val) && val.length === 0)) return;
+      const display = Array.isArray(val) ? val.join(', ') : val;
+      html += '<div class="summary-item">' +
+        '<div class="summary-q">' + labels[key] + '</div>' +
+        '<div class="summary-a">' + display + '</div>' +
+      '</div>';
+    });
+
+    summary.innerHTML = html;
+    window.scrollTo(0, 0);
+
+    // Envoi vers Formspree
+    fetch('https://formspree.io/f/meepbjqa', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(answers)
+    }).catch(err => console.error('Erreur envoi:', err));
+  }
+
+  showSection(0);
+</script>
+
+</body>
+</html>

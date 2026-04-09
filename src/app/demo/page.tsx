@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import {
   establishment,
   supplier,
@@ -30,6 +30,80 @@ export default function DemoPage() {
   });
   const [editingNote, setEditingNote] = useState<string | null>(null);
   const [draftNote, setDraftNote] = useState('');
+
+  // Prep tasks: cartes de preparation independantes du jour du repas
+  interface PrepTask {
+    id: string;
+    label: string;
+    forMeal: string; // ex: "Mer dej" — le repas cible
+    color: string;
+  }
+  const [prepTasks, setPrepTasks] = useState<PrepTask[]>([
+    { id: 'p1', label: 'Faire mariner le poulet', forMeal: 'Lun dej', color: 'bg-red-100 text-red-700 border-red-200' },
+    { id: 'p2', label: 'Eplucher carottes + oignons', forMeal: 'Lun dej', color: 'bg-green-100 text-green-700 border-green-200' },
+    { id: 'p3', label: 'Sauce tomate maison', forMeal: 'Lun din', color: 'bg-orange-100 text-orange-700 border-orange-200' },
+    { id: 'p4', label: 'Couper courgettes', forMeal: 'Mar dej', color: 'bg-green-100 text-green-700 border-green-200' },
+    { id: 'p5', label: 'Preparer puree', forMeal: 'Mer dej', color: 'bg-amber-100 text-amber-700 border-amber-200' },
+    { id: 'p6', label: 'Laver epinards', forMeal: 'Mer dej', color: 'bg-green-100 text-green-700 border-green-200' },
+    { id: 'p7', label: 'Soupe de legumes', forMeal: 'Mer din', color: 'bg-green-100 text-green-700 border-green-200' },
+  ]);
+
+  // Ou chaque prep est placee: slot = "jour-creneau" ex: "lun-matin", "mar-aprem"
+  const prepSlots: Record<string, string> = {
+    'lun-matin': 'Lun matin',
+    'lun-aprem': 'Lun aprem',
+    'mar-matin': 'Mar matin',
+    'mar-aprem': 'Mar aprem',
+    'mer-matin': 'Mer matin',
+    'mer-aprem': 'Mer aprem',
+  };
+  const [taskSlots, setTaskSlots] = useState<Record<string, string>>({
+    // Pre-place quelques taches pour la demo
+    'p1': 'lun-matin',    // Mariner poulet → lundi matin
+    'p2': 'lun-matin',    // Eplucher → lundi matin
+    'p3': 'lun-aprem',    // Sauce tomate → lundi aprem
+    'p5': 'mer-matin',    // Puree → mercredi matin
+    'p7': 'mar-aprem',    // Soupe → mardi aprem (prepa la veille)
+  });
+
+  const [dragging, setDragging] = useState<string | null>(null);
+  const [newTaskLabel, setNewTaskLabel] = useState('');
+  const [newTaskMeal, setNewTaskMeal] = useState('');
+
+  const handleDragStart = useCallback((taskId: string) => {
+    setDragging(taskId);
+  }, []);
+
+  const handleDrop = useCallback((slotId: string) => {
+    if (dragging) {
+      setTaskSlots((prev) => ({ ...prev, [dragging]: slotId }));
+      setDragging(null);
+    }
+  }, [dragging]);
+
+  const handleDropUnassign = useCallback(() => {
+    if (dragging) {
+      setTaskSlots((prev) => {
+        const n = { ...prev };
+        delete n[dragging];
+        return n;
+      });
+      setDragging(null);
+    }
+  }, [dragging]);
+
+  const addPrepTask = useCallback(() => {
+    if (!newTaskLabel.trim()) return;
+    const id = 'p' + Date.now();
+    setPrepTasks((prev) => [...prev, {
+      id,
+      label: newTaskLabel.trim(),
+      forMeal: newTaskMeal || '',
+      color: 'bg-gray-100 text-gray-700 border-gray-200',
+    }]);
+    setNewTaskLabel('');
+    setNewTaskMeal('');
+  }, [newTaskLabel, newTaskMeal]);
 
   // Budget: cout total pour 12 pers sur 6 repas
   const totalEstimated = suggestions.reduce((sum, s) => sum + s.estimated_cost, 0);
@@ -326,6 +400,127 @@ export default function DemoPage() {
                 </tbody>
               </table>
             </div>
+
+            {/* ====== PREP PLANNING — Drag & Drop ====== */}
+            <section>
+              <h2 className="font-semibold text-gray-700 mb-1">Organisation des preps</h2>
+              <p className="text-xs text-gray-400 mb-3">Glissez les cartes pour planifier les preparations</p>
+
+              {/* Taches non placees */}
+              {prepTasks.filter((t) => !taskSlots[t.id]).length > 0 && (
+                <div
+                  className={`mb-4 p-3 rounded-lg border-2 border-dashed transition-colors ${
+                    dragging && taskSlots[dragging] ? 'border-red-300 bg-red-50' : 'border-gray-200 bg-gray-50'
+                  }`}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={() => handleDropUnassign()}
+                >
+                  <p className="text-xs font-medium text-gray-500 mb-2">A placer</p>
+                  <div className="flex flex-wrap gap-2">
+                    {prepTasks.filter((t) => !taskSlots[t.id]).map((task) => (
+                      <div
+                        key={task.id}
+                        draggable
+                        onDragStart={() => handleDragStart(task.id)}
+                        className={`${task.color} border rounded-lg px-3 py-1.5 text-xs font-medium cursor-grab active:cursor-grabbing shadow-sm hover:shadow`}
+                      >
+                        {task.label}
+                        {task.forMeal && <span className="ml-1 opacity-50">({task.forMeal})</span>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Grille prep: jours x matin/aprem */}
+              <div className="overflow-x-auto -mx-4 px-4">
+                <table className="w-full min-w-[500px] border-collapse">
+                  <thead>
+                    <tr>
+                      <th className="w-20"></th>
+                      <th className="text-xs font-semibold text-gray-500 pb-2 text-left">Matin</th>
+                      <th className="text-xs font-semibold text-gray-500 pb-2 text-left">Apres-midi</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {['lun', 'mar', 'mer'].map((day) => (
+                      <tr key={day} className="border-t border-gray-100">
+                        <td className="py-2 pr-3 align-top">
+                          <span className="text-sm font-semibold text-gray-700 capitalize">{day}</span>
+                        </td>
+                        {['matin', 'aprem'].map((slot) => {
+                          const slotId = `${day}-${slot}`;
+                          const tasksInSlot = prepTasks.filter((t) => taskSlots[t.id] === slotId);
+                          return (
+                            <td
+                              key={slotId}
+                              className="py-2 px-1 align-top"
+                              onDragOver={(e) => e.preventDefault()}
+                              onDrop={() => handleDrop(slotId)}
+                            >
+                              <div
+                                className={`min-h-[48px] rounded-lg border-2 border-dashed p-1.5 transition-colors ${
+                                  dragging ? 'border-brand-300 bg-brand-50' : 'border-transparent'
+                                }`}
+                              >
+                                {tasksInSlot.length > 0 ? (
+                                  <div className="space-y-1">
+                                    {tasksInSlot.map((task) => (
+                                      <div
+                                        key={task.id}
+                                        draggable
+                                        onDragStart={() => handleDragStart(task.id)}
+                                        className={`${task.color} border rounded-lg px-2 py-1 text-xs font-medium cursor-grab active:cursor-grabbing`}
+                                      >
+                                        {task.label}
+                                        {task.forMeal && <span className="ml-1 opacity-50">→ {task.forMeal}</span>}
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <p className="text-xs text-gray-300 text-center py-2">—</p>
+                                )}
+                              </div>
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Ajouter une tache de prep */}
+              <div className="mt-3 flex gap-2">
+                <input
+                  className="input text-sm flex-1"
+                  placeholder="Nouvelle prep..."
+                  value={newTaskLabel}
+                  onChange={(e) => setNewTaskLabel(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && addPrepTask()}
+                />
+                <select
+                  className="input text-sm w-28"
+                  value={newTaskMeal}
+                  onChange={(e) => setNewTaskMeal(e.target.value)}
+                >
+                  <option value="">Pour...</option>
+                  <option value="Lun dej">Lun dej</option>
+                  <option value="Lun din">Lun din</option>
+                  <option value="Mar dej">Mar dej</option>
+                  <option value="Mar din">Mar din</option>
+                  <option value="Mer dej">Mer dej</option>
+                  <option value="Mer din">Mer din</option>
+                </select>
+                <button
+                  onClick={addPrepTask}
+                  className="btn-primary text-sm"
+                  disabled={!newTaskLabel.trim()}
+                >
+                  +
+                </button>
+              </div>
+            </section>
 
             {/* Liste de courses */}
             <section>

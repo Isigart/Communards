@@ -26,7 +26,7 @@ export default function DemoPage() {
   const [feedbackGiven, setFeedbackGiven] = useState<Record<string, string>>({});
   const [chefNotes, setChefNotes] = useState<Record<string, string>>({
     '3': 'Faire un saute avec les courgettes, pas de wok',
-    '5': 'Preparer la puree le matin pour le service du midi',
+    '5': 'Preparer la puree le matin pour le service du soir',
   });
   const [editingNote, setEditingNote] = useState<string | null>(null);
   const [draftNote, setDraftNote] = useState('');

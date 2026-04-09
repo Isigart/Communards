@@ -24,6 +24,12 @@ const CATEGORY_COLORS: Record<string, string> = {
 export default function DemoPage() {
   const [tab, setTab] = useState<Tab>('dashboard');
   const [feedbackGiven, setFeedbackGiven] = useState<Record<string, string>>({});
+  const [chefNotes, setChefNotes] = useState<Record<string, string>>({
+    '3': 'Faire un saute avec les courgettes, pas de wok',
+    '5': 'Preparer la puree le matin pour le service du midi',
+  });
+  const [editingNote, setEditingNote] = useState<string | null>(null);
+  const [draftNote, setDraftNote] = useState('');
 
   // Budget: cout total pour 12 pers sur 6 repas
   const totalEstimated = suggestions.reduce((sum, s) => sum + s.estimated_cost, 0);
@@ -235,6 +241,62 @@ export default function DemoPage() {
                             </span>
                           ))}
                         </div>
+
+                        {/* Note du chef */}
+                        {chefNotes[s.id] && editingNote !== s.id && (
+                          <div className="mt-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 flex justify-between items-start">
+                            <p className="text-sm text-amber-800">{chefNotes[s.id]}</p>
+                            <button
+                              onClick={() => { setEditingNote(s.id); setDraftNote(chefNotes[s.id]); }}
+                              className="text-xs text-amber-500 hover:text-amber-700 ml-2 shrink-0"
+                            >
+                              Modifier
+                            </button>
+                          </div>
+                        )}
+
+                        {/* Edition de note */}
+                        {editingNote === s.id ? (
+                          <div className="mt-2 space-y-2">
+                            <textarea
+                              className="input text-sm"
+                              rows={2}
+                              placeholder="Ex: Faire un gratin, preparer le matin..."
+                              value={draftNote}
+                              onChange={(e) => setDraftNote(e.target.value)}
+                              autoFocus
+                            />
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => {
+                                  if (draftNote.trim()) {
+                                    setChefNotes((prev) => ({ ...prev, [s.id]: draftNote.trim() }));
+                                  } else {
+                                    setChefNotes((prev) => { const n = { ...prev }; delete n[s.id]; return n; });
+                                  }
+                                  setEditingNote(null);
+                                  setDraftNote('');
+                                }}
+                                className="text-sm py-1.5 px-3 rounded-lg bg-brand-500 text-white hover:bg-brand-600"
+                              >
+                                Enregistrer
+                              </button>
+                              <button
+                                onClick={() => { setEditingNote(null); setDraftNote(''); }}
+                                className="text-sm py-1.5 px-3 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200"
+                              >
+                                Annuler
+                              </button>
+                            </div>
+                          </div>
+                        ) : !chefNotes[s.id] && (
+                          <button
+                            onClick={() => { setEditingNote(s.id); setDraftNote(''); }}
+                            className="mt-2 text-xs text-gray-400 hover:text-brand-500"
+                          >
+                            + Ajouter une note
+                          </button>
+                        )}
                       </div>
                     ))}
                   </div>

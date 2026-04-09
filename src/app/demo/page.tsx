@@ -25,8 +25,9 @@ export default function DemoPage() {
   const [tab, setTab] = useState<Tab>('dashboard');
   const [feedbackGiven, setFeedbackGiven] = useState<Record<string, string>>({});
 
+  // Budget: cout total pour 12 pers sur 6 repas
   const totalEstimated = suggestions.reduce((sum, s) => sum + s.estimated_cost, 0);
-  const budgetTotal = establishment.budget_per_meal * suggestions.length;
+  const budgetTotal = establishment.budget_per_meal * establishment.employee_count * suggestions.length;
 
   const todaySuggestions = suggestions.filter((s) => s.meal_date === '2026-04-07');
   const grouped = suggestions.reduce<Record<string, typeof suggestions>>((acc, s) => {
@@ -122,7 +123,7 @@ export default function DemoPage() {
                         {s.meal_type === 'lunch' ? 'Dejeuner' : 'Diner'}
                       </span>
                       <span className="text-sm font-medium text-gray-400">
-                        ~{s.estimated_cost} {establishment.currency}
+                        ~{s.estimated_cost} {establishment.currency} ({(s.estimated_cost / establishment.employee_count).toFixed(1)}/pers)
                       </span>
                     </div>
                     <div className="mt-2 flex flex-wrap gap-1.5">
@@ -219,7 +220,7 @@ export default function DemoPage() {
                             {s.meal_type === 'lunch' ? 'Dejeuner' : 'Diner'}
                           </span>
                           <span className="text-xs text-gray-400">
-                            ~{s.estimated_cost} {establishment.currency}
+                            ~{s.estimated_cost} {establishment.currency} ({(s.estimated_cost / establishment.employee_count).toFixed(1)}/pers)
                           </span>
                         </div>
                         <div className="flex flex-wrap gap-1.5">

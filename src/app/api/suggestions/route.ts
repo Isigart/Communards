@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { authenticate } from '@/lib/auth';
+import { authenticate, type AuthContext } from '@/lib/auth';
 import { createServerClient } from '@/lib/supabase';
 import { getCached, setCache } from '@/lib/redis';
 import { generateSuggestions } from '@/lib/claude';
@@ -123,7 +123,7 @@ export async function POST(req: NextRequest) {
 
 async function generateAndStore(
   supabase: ReturnType<typeof createServerClient>,
-  auth: { establishment: { id: string } } & Record<string, unknown>,
+  auth: AuthContext,
   span: SupplySpan,
   supplier: { id: string }
 ) {

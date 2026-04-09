@@ -552,6 +552,38 @@ export default function DemoPage() {
               </div>
             </header>
 
+            {/* Preps du jour */}
+            {(() => {
+              const todayPreps = prepTasks.filter((t) => {
+                const slot = taskSlots[t.id];
+                return slot && slot.startsWith('mar'); // "aujourd'hui" = mardi dans la demo
+              });
+              return todayPreps.length > 0 ? (
+                <section>
+                  <h2 className="font-semibold text-gray-700 mb-3">Preps du jour</h2>
+                  <div className="space-y-2">
+                    {['mar-matin', 'mar-aprem'].map((slotId) => {
+                      const tasks = prepTasks.filter((t) => taskSlots[t.id] === slotId);
+                      if (tasks.length === 0) return null;
+                      return (
+                        <div key={slotId}>
+                          <p className="text-xs font-medium text-gray-500 mb-1">
+                            {slotId.includes('matin') ? 'Matin' : 'Apres-midi'}
+                          </p>
+                          {tasks.map((task) => (
+                            <div key={task.id} className={`${task.color} border rounded-lg px-3 py-2 text-sm font-medium mb-1`}>
+                              {task.label}
+                              {task.forMeal && <span className="ml-1 opacity-50">→ {task.forMeal}</span>}
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </section>
+              ) : null;
+            })()}
+
             <section>
               <h2 className="font-semibold text-gray-700 mb-3">Aujourd&apos;hui — Mardi 7</h2>
               <div className="space-y-3">
@@ -568,6 +600,12 @@ export default function DemoPage() {
                         </div>
                       ))}
                     </div>
+                    {/* Note du chef */}
+                    {chefNotes[s.id] && (
+                      <div className="mt-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                        <p className="text-sm text-amber-800">{chefNotes[s.id]}</p>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -588,6 +626,9 @@ export default function DemoPage() {
                           {s.ingredients.map((ing) => ing.name).join(', ')}
                         </span>
                       </div>
+                      {chefNotes[s.id] && (
+                        <p className="text-xs text-amber-700 mt-1">{chefNotes[s.id]}</p>
+                      )}
                     </div>
                   ))}
               </div>

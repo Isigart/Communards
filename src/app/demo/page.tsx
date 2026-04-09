@@ -204,114 +204,138 @@ export default function DemoPage() {
         {/* ==================== PLANNING ==================== */}
         {tab === 'planning' && (
           <>
-            <header>
-              <h1 className="text-xl font-bold">Planning</h1>
-              <p className="text-sm text-gray-500">
-                {currentSpan.label} — {supplier.name}
-              </p>
+            <header className="flex justify-between items-start">
+              <div>
+                <h1 className="text-xl font-bold">Planning</h1>
+                <p className="text-sm text-gray-500">
+                  {currentSpan.label} — {supplier.name}
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="text-sm font-medium">{totalEstimated} / {budgetTotal} {establishment.currency}</p>
+                <p className="text-xs text-gray-400">{establishment.employee_count} pers.</p>
+              </div>
             </header>
 
-            {Object.entries(grouped)
-              .sort(([a], [b]) => a.localeCompare(b))
-              .map(([date, meals]) => (
-                <div key={date}>
-                  <h2 className="font-semibold text-gray-700 mb-2 capitalize">
-                    {formatDate(date)}
-                  </h2>
-                  <div className="space-y-2">
-                    {meals.map((s) => (
-                      <div key={s.id} className="card">
-                        <div className="flex justify-between items-center mb-2">
-                          <span className="text-xs font-semibold uppercase tracking-wide text-brand-500">
-                            {s.meal_type === 'lunch' ? 'Dejeuner' : 'Diner'}
-                          </span>
-                          <span className="text-xs text-gray-400">
-                            ~{s.estimated_cost} {establishment.currency} ({(s.estimated_cost / establishment.employee_count).toFixed(1)}/pers)
-                          </span>
-                        </div>
-                        <div className="flex flex-wrap gap-1.5">
-                          {s.ingredients.map((ing, i) => (
-                            <span
-                              key={i}
-                              className={`text-sm rounded-full px-2.5 py-0.5 ${
-                                CATEGORY_COLORS[ing.category] || 'bg-gray-100 text-gray-700'
-                              }`}
-                            >
-                              {ing.name}
+            {/* Grille planning — vue complete du span */}
+            <div className="overflow-x-auto -mx-4 px-4">
+              <table className="w-full min-w-[500px] border-collapse">
+                <thead>
+                  <tr>
+                    <th className="text-left text-xs font-semibold text-gray-500 pb-2 w-20"></th>
+                    <th className="text-left text-xs font-semibold text-brand-500 pb-2 uppercase">Dejeuner</th>
+                    <th className="text-left text-xs font-semibold text-brand-500 pb-2 uppercase">Diner</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(grouped)
+                    .sort(([a], [b]) => a.localeCompare(b))
+                    .map(([date, meals]) => {
+                      const lunch = meals.find((m) => m.meal_type === 'lunch');
+                      const dinner = meals.find((m) => m.meal_type === 'dinner');
+                      return (
+                        <tr key={date} className="border-t border-gray-100">
+                          <td className="py-3 pr-3 align-top">
+                            <span className="text-sm font-semibold text-gray-700 capitalize">
+                              {new Date(date + 'T00:00:00').toLocaleDateString('fr-FR', {
+                                weekday: 'short',
+                                day: 'numeric',
+                              })}
                             </span>
+                          </td>
+                          {[lunch, dinner].map((s) => (
+                            <td key={s?.id || Math.random()} className="py-3 px-2 align-top">
+                              {s && (
+                                <div
+                                  className="bg-white rounded-lg border border-gray-100 p-2.5 hover:border-brand-300 cursor-pointer transition-colors"
+                                  onClick={() => {
+                                    if (editingNote !== s.id) {
+                                      setEditingNote(s.id);
+                                      setDraftNote(chefNotes[s.id] || '');
+                                    }
+                                  }}
+                                >
+                                  <div className="flex flex-wrap gap-1 mb-1">
+                                    {s.ingredients.map((ing, i) => (
+                                      <span
+                                        key={i}
+                                        className={`text-xs rounded-full px-2 py-0.5 ${
+                                          CATEGORY_COLORS[ing.category] || 'bg-gray-100 text-gray-700'
+                                        }`}
+                                      >
+                                        {ing.name}
+                                      </span>
+                                    ))}
+                                  </div>
+                                  <p className="text-xs text-gray-400">
+                                    ~{(s.estimated_cost / establishment.employee_count).toFixed(1)} {establishment.currency}/pers
+                                  </p>
+
+                                  {/* Note du chef */}
+                                  {chefNotes[s.id] && editingNote !== s.id && (
+                                    <div className="mt-1.5 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+                                      <p className="text-xs text-amber-800">{chefNotes[s.id]}</p>
+                                    </div>
+                                  )}
+
+                                  {editingNote === s.id && (
+                                    <div className="mt-1.5 space-y-1.5" onClick={(e) => e.stopPropagation()}>
+                                      <textarea
+                                        className="w-full border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-brand-400"
+                                        rows={2}
+                                        placeholder="Note du chef..."
+                                        value={draftNote}
+                                        onChange={(e) => setDraftNote(e.target.value)}
+                                        autoFocus
+                                      />
+                                      <div className="flex gap-1">
+                                        <button
+                                          onClick={() => {
+                                            if (draftNote.trim()) {
+                                              setChefNotes((prev) => ({ ...prev, [s.id]: draftNote.trim() }));
+                                            } else {
+                                              setChefNotes((prev) => { const n = { ...prev }; delete n[s.id]; return n; });
+                                            }
+                                            setEditingNote(null);
+                                            setDraftNote('');
+                                          }}
+                                          className="text-xs py-1 px-2 rounded bg-brand-500 text-white"
+                                        >
+                                          OK
+                                        </button>
+                                        <button
+                                          onClick={() => { setEditingNote(null); setDraftNote(''); }}
+                                          className="text-xs py-1 px-2 rounded bg-gray-100 text-gray-500"
+                                        >
+                                          Annuler
+                                        </button>
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {!chefNotes[s.id] && editingNote !== s.id && (
+                                    <p className="mt-1 text-xs text-gray-300 italic">+ note</p>
+                                  )}
+                                </div>
+                              )}
+                            </td>
                           ))}
-                        </div>
-
-                        {/* Note du chef */}
-                        {chefNotes[s.id] && editingNote !== s.id && (
-                          <div className="mt-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 flex justify-between items-start">
-                            <p className="text-sm text-amber-800">{chefNotes[s.id]}</p>
-                            <button
-                              onClick={() => { setEditingNote(s.id); setDraftNote(chefNotes[s.id]); }}
-                              className="text-xs text-amber-500 hover:text-amber-700 ml-2 shrink-0"
-                            >
-                              Modifier
-                            </button>
-                          </div>
-                        )}
-
-                        {/* Edition de note */}
-                        {editingNote === s.id ? (
-                          <div className="mt-2 space-y-2">
-                            <textarea
-                              className="input text-sm"
-                              rows={2}
-                              placeholder="Ex: Faire un gratin, preparer le matin..."
-                              value={draftNote}
-                              onChange={(e) => setDraftNote(e.target.value)}
-                              autoFocus
-                            />
-                            <div className="flex gap-2">
-                              <button
-                                onClick={() => {
-                                  if (draftNote.trim()) {
-                                    setChefNotes((prev) => ({ ...prev, [s.id]: draftNote.trim() }));
-                                  } else {
-                                    setChefNotes((prev) => { const n = { ...prev }; delete n[s.id]; return n; });
-                                  }
-                                  setEditingNote(null);
-                                  setDraftNote('');
-                                }}
-                                className="text-sm py-1.5 px-3 rounded-lg bg-brand-500 text-white hover:bg-brand-600"
-                              >
-                                Enregistrer
-                              </button>
-                              <button
-                                onClick={() => { setEditingNote(null); setDraftNote(''); }}
-                                className="text-sm py-1.5 px-3 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200"
-                              >
-                                Annuler
-                              </button>
-                            </div>
-                          </div>
-                        ) : !chefNotes[s.id] && (
-                          <button
-                            onClick={() => { setEditingNote(s.id); setDraftNote(''); }}
-                            className="mt-2 text-xs text-gray-400 hover:text-brand-500"
-                          >
-                            + Ajouter une note
-                          </button>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
+                        </tr>
+                      );
+                    })}
+                </tbody>
+              </table>
+            </div>
 
             {/* Liste de courses */}
             <section>
               <h2 className="font-semibold text-gray-700 mb-3">Liste de courses — {supplier.name}</h2>
               <div className="card">
-                <div className="divide-y divide-gray-100">
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1">
                   {groceryList.map((item, i) => (
-                    <div key={i} className="flex justify-between items-center py-1.5">
+                    <div key={i} className="flex justify-between items-center py-1">
                       <span className="text-sm font-medium">{item.name}</span>
-                      <span className="text-sm text-gray-400">{item.quantity}</span>
+                      <span className="text-sm text-gray-400 ml-2">{item.quantity}</span>
                     </div>
                   ))}
                 </div>

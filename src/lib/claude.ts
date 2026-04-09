@@ -20,7 +20,7 @@ export async function generateSuggestions(input: GenerateInput): Promise<Omit<Su
       ).join('\n')}`
     : '';
 
-  const prompt = `Tu es un assistant culinaire pour le repas du personnel (communard) en restauration professionnelle.
+  const prompt = `Tu es un assistant culinaire pour le repas du personnel (la table de l'equipe) en restauration professionnelle.
 
 Etablissement: ${establishment.name}
 Nombre d'employes: ${establishment.employee_count}

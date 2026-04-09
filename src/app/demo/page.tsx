@@ -133,7 +133,7 @@ export default function DemoPage() {
     <div className="min-h-screen bg-gray-50">
       {/* Banner demo */}
       <div className="bg-brand-600 text-white text-center py-2 text-sm font-medium">
-        Demo Communard — Donnees fictives
+        Demo La Table de l&apos;Equipe — Donnees fictives
       </div>
 
       {/* Navigation tabs */}
@@ -164,7 +164,7 @@ export default function DemoPage() {
         {tab === 'dashboard' && (
           <>
             <header>
-              <h1 className="text-xl font-bold text-brand-600">Communard</h1>
+              <h1 className="text-xl font-bold text-brand-600">La Table de l&apos;Equipe</h1>
               <p className="text-sm text-gray-500">{establishment.name} — {establishment.employee_count} employes</p>
             </header>
 

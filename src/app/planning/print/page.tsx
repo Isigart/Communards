@@ -58,7 +58,7 @@ export default function PrintPlanningPage() {
   return (
     <div className="p-8 max-w-[210mm] mx-auto text-sm print:p-0">
       <header className="mb-6">
-        <h1 className="text-xl font-bold">{establishment?.name} — Communard</h1>
+        <h1 className="text-xl font-bold">{establishment?.name} — La Table de l&apos;Equipe</h1>
         {span && (
           <p className="text-gray-500">
             {span.start_date} → {span.end_date}

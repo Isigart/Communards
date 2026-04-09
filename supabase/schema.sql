@@ -1,4 +1,4 @@
--- Communard — Schema PostgreSQL + RLS
+-- La Table de l'Equipe — Schema PostgreSQL + RLS
 -- Coller dans Supabase SQL Editor
 
 -- Extensions

@@ -1,6 +1,6 @@
 {
-  "name": "Communard",
-  "short_name": "Communard",
+  "name": "La Table de l'Equipe",
+  "short_name": "La Table",
   "description": "Le repas du personnel, organise.",
   "start_url": "/dashboard",
   "display": "standalone",

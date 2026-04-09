@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Communard',
+  title: 'La Table de l\'Equipe',
   description: 'Le repas du personnel, organise.',
   manifest: '/manifest.json',
 };

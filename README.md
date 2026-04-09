@@ -1,4 +1,4 @@
-# Communard — The staff meal app
+# La Table de l'Equipe — The staff meal app
 
 Chaque jour, des combinaisons d'ingredients pour le repas du personnel.
 Calees sur vos livraisons. Dans votre budget. Variees.
@@ -11,9 +11,9 @@ Dans les petites et moyennes structures CHR (5-40 employes), le repas du personn
 
 ## La philosophie
 
-Communard ne propose pas des recettes — il propose des **combinaisons d'ingredients**. Le chef fait ce qu'il veut avec. L'IA organise, elle n'enseigne pas.
+La Table de l'Equipe ne propose pas des recettes — il propose des **combinaisons d'ingredients**. Le chef fait ce qu'il veut avec. L'IA organise, elle n'enseigne pas.
 
-## Ce que Communard fait — V1
+## Ce que La Table de l'Equipe fait — V1
 
 Quatre choses. Pas une de plus.
 
@@ -129,5 +129,5 @@ Code global, donnees locales. Une variable `market` adapte tout :
 
 ---
 
-**Communard** — Cree par quelqu'un qui a nourri des brigades.
+**La Table de l'Equipe** — Cree par quelqu'un qui a nourri des brigades.
 Fait avec passion en Dordogne.

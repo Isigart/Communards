@@ -24,7 +24,7 @@ export default function Home() {
     <main className="flex min-h-screen flex-col items-center justify-center p-6">
       <div className="w-full max-w-sm space-y-8">
         <div className="text-center">
-          <h1 className="text-3xl font-bold text-brand-600">Communard</h1>
+          <h1 className="text-3xl font-bold text-brand-600">La Table de l&apos;Equipe</h1>
           <p className="mt-2 text-gray-600">Le repas du personnel, organise.</p>
         </div>
 

@@ -2,13 +2,15 @@
 
 import { useState, useCallback } from 'react';
 import {
-  establishment,
+  establishment as defaultEstablishment,
   supplier,
   currentSpan,
   suggestions,
   groceryList,
   feedbackHistory,
+  BUDGET_HCR,
 } from './data';
+import { computeSpanDefinitions } from '@/lib/spans';
 
 type Tab = 'dashboard' | 'planning' | 'brief';
 
@@ -21,7 +23,34 @@ const CATEGORY_COLORS: Record<string, string> = {
   aromate: 'bg-purple-100 text-purple-700',
 };
 
+type ServiceType = 'lunch' | 'dinner' | 'both';
+
+const DAY_LABELS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
+const DAY_VALUES = [1, 2, 3, 4, 5, 6, 0]; // ISO: 1=Lun ... 0=Dim
+
+const CONSTRAINTS_OPTIONS = [
+  { value: 'aucune', label: 'Aucune' },
+  { value: 'vegetarien', label: 'Vegetarien' },
+  { value: 'sans-porc', label: 'Sans porc' },
+  { value: 'sans-gluten', label: 'Sans gluten' },
+];
+
 export default function DemoPage() {
+  // ===== ONBOARDING STATE =====
+  const [onboarded, setOnboarded] = useState(false);
+  const [obStep, setObStep] = useState(0);
+  const [obName, setObName] = useState('');
+  const [obService, setObService] = useState<ServiceType | ''>('');
+  const [obCountLunch, setObCountLunch] = useState(12);
+  const [obCountDinner, setObCountDinner] = useState(8);
+  const [obOrderDays, setObOrderDays] = useState<number[]>([]);
+  const [obConstraints, setObConstraints] = useState<string[]>([]);
+  const [obConstraintOther, setObConstraintOther] = useState('');
+  const [establishment, setEstablishment] = useState(defaultEstablishment);
+  const [computedBudget, setComputedBudget] = useState<number | null>(null);
+  const [computedSpans, setComputedSpans] = useState<{ start_day: number; end_day: number; day_count: number }[]>([]);
+
+  // ===== APP STATE =====
   const [tab, setTab] = useState<Tab>('dashboard');
   const [feedbackGiven, setFeedbackGiven] = useState<Record<string, string>>({});
   const [chefNotes, setChefNotes] = useState<Record<string, string>>({
@@ -105,6 +134,70 @@ export default function DemoPage() {
     setNewTaskMeal('');
   }, [newTaskLabel, newTaskMeal]);
 
+  // ===== ONBOARDING LOGIC =====
+  const toggleOrderDay = (day: number) => {
+    setObOrderDays((prev) =>
+      prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day].sort((a, b) => a - b)
+    );
+  };
+
+  const toggleConstraint = (value: string) => {
+    if (value === 'aucune') {
+      setObConstraints(['aucune']);
+      return;
+    }
+    setObConstraints((prev) => {
+      const without = prev.filter((c) => c !== 'aucune');
+      return without.includes(value) ? without.filter((c) => c !== value) : [...without, value];
+    });
+  };
+
+  const canAdvance = () => {
+    switch (obStep) {
+      case 0: return obName.trim().length > 0;
+      case 1: return obService !== '';
+      case 2: return obService === 'both' ? obCountLunch > 0 && obCountDinner > 0 : obCountLunch > 0;
+      case 3: return obOrderDays.length > 0;
+      case 4: return true;
+      default: return false;
+    }
+  };
+
+  const submitOnboarding = () => {
+    // Calcul du nombre total de personnes par jour
+    let totalPersonsPerDay: number;
+    if (obService === 'both') {
+      totalPersonsPerDay = obCountLunch + obCountDinner;
+    } else {
+      totalPersonsPerDay = obCountLunch;
+    }
+
+    // Nombre de services par jour
+    const servicesPerDay = obService === 'both' ? 2 : 1;
+
+    // Budget legal HCR = 4.25 x personnes x services x 5 jours
+    // Si "les deux" avec effectifs differents: (midi + soir) x 4.25 x 5
+    const weeklyBudget = obService === 'both'
+      ? (obCountLunch + obCountDinner) * BUDGET_HCR * 5
+      : obCountLunch * BUDGET_HCR * servicesPerDay * 5;
+
+    setComputedBudget(weeklyBudget);
+
+    // Generer les spans a partir des jours de commande
+    const spans = computeSpanDefinitions(obOrderDays);
+    setComputedSpans(spans);
+
+    // Mettre a jour l'etablissement
+    setEstablishment({
+      ...defaultEstablishment,
+      name: obName.trim(),
+      employee_count: totalPersonsPerDay,
+      budget_per_meal: BUDGET_HCR,
+    });
+
+    setOnboarded(true);
+  };
+
   // Budget: cout total pour 12 pers sur 6 repas
   const totalEstimated = suggestions.reduce((sum, s) => sum + s.estimated_cost, 0);
   const budgetTotal = establishment.budget_per_meal * establishment.employee_count * suggestions.length;
@@ -129,6 +222,214 @@ export default function DemoPage() {
       day: 'numeric',
     });
 
+  // ===== ONBOARDING RENDER =====
+  if (!onboarded) {
+    const progress = ((obStep + 1) / 5) * 100;
+
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <div className="bg-brand-600 text-white text-center py-2 text-sm font-medium">
+          Demo La Table de l&apos;Equipe
+        </div>
+
+        <div className="max-w-md mx-auto px-4 pt-8 pb-32">
+          {/* Progress */}
+          <div className="mb-2 flex justify-between items-center">
+            <span className="text-xs text-gray-400">Etape {obStep + 1} / 5</span>
+            <span className="text-xs text-gray-400">Configuration</span>
+          </div>
+          <div className="h-1.5 bg-gray-200 rounded-full mb-8">
+            <div
+              className="h-full bg-brand-500 rounded-full transition-all duration-300"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+
+          {/* Step 0: Nom */}
+          {obStep === 0 && (
+            <div className="space-y-4">
+              <h2 className="text-xl font-bold text-gray-800">Comment s&apos;appelle votre etablissement ?</h2>
+              <input
+                type="text"
+                className="input text-lg"
+                placeholder="Le Bistrot du Marche"
+                value={obName}
+                onChange={(e) => setObName(e.target.value)}
+                autoFocus
+              />
+            </div>
+          )}
+
+          {/* Step 1: Services */}
+          {obStep === 1 && (
+            <div className="space-y-4">
+              <h2 className="text-xl font-bold text-gray-800">Quels services nourrissez-vous ?</h2>
+              <div className="space-y-3">
+                {([
+                  ['lunch', 'Dejeuner uniquement'],
+                  ['dinner', 'Diner uniquement'],
+                  ['both', 'Les deux'],
+                ] as [ServiceType, string][]).map(([value, label]) => (
+                  <button
+                    key={value}
+                    onClick={() => setObService(value)}
+                    className={`w-full p-4 rounded-xl border-2 text-left font-medium transition-colors ${
+                      obService === value
+                        ? 'border-brand-500 bg-brand-50 text-brand-700'
+                        : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Step 2: Nombre de personnes */}
+          {obStep === 2 && (
+            <div className="space-y-4">
+              <h2 className="text-xl font-bold text-gray-800">Combien de personnes par service ?</h2>
+              {obService === 'both' ? (
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-600 mb-2">Midi</label>
+                    <input
+                      type="number"
+                      className="input text-lg text-center"
+                      value={obCountLunch}
+                      onChange={(e) => setObCountLunch(Math.max(1, parseInt(e.target.value) || 1))}
+                      min={1}
+                      autoFocus
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-600 mb-2">Soir</label>
+                    <input
+                      type="number"
+                      className="input text-lg text-center"
+                      value={obCountDinner}
+                      onChange={(e) => setObCountDinner(Math.max(1, parseInt(e.target.value) || 1))}
+                      min={1}
+                    />
+                  </div>
+                </div>
+              ) : (
+                <input
+                  type="number"
+                  className="input text-lg text-center"
+                  value={obCountLunch}
+                  onChange={(e) => setObCountLunch(Math.max(1, parseInt(e.target.value) || 1))}
+                  min={1}
+                  autoFocus
+                />
+              )}
+              <p className="text-xs text-gray-400">
+                Budget legal HCR : {BUDGET_HCR} EUR par repas et par personne
+              </p>
+            </div>
+          )}
+
+          {/* Step 3: Jours de commande */}
+          {obStep === 3 && (
+            <div className="space-y-4">
+              <h2 className="text-xl font-bold text-gray-800">Quels jours commandez-vous ?</h2>
+              <p className="text-sm text-gray-500">Les suggestions seront calees entre vos livraisons</p>
+              <div className="grid grid-cols-4 gap-2">
+                {DAY_LABELS.map((label, i) => {
+                  const dayVal = DAY_VALUES[i];
+                  const selected = obOrderDays.includes(dayVal);
+                  return (
+                    <button
+                      key={dayVal}
+                      onClick={() => toggleOrderDay(dayVal)}
+                      className={`py-3 rounded-xl border-2 font-medium text-sm transition-colors ${
+                        selected
+                          ? 'border-brand-500 bg-brand-500 text-white'
+                          : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+              {obOrderDays.length > 0 && (
+                <p className="text-xs text-gray-400">
+                  {computeSpanDefinitions(obOrderDays).length} span(s) par semaine
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Step 4: Contraintes alimentaires */}
+          {obStep === 4 && (
+            <div className="space-y-4">
+              <h2 className="text-xl font-bold text-gray-800">Contraintes alimentaires ?</h2>
+              <div className="grid grid-cols-2 gap-2">
+                {CONSTRAINTS_OPTIONS.map((opt) => {
+                  const selected = obConstraints.includes(opt.value);
+                  return (
+                    <button
+                      key={opt.value}
+                      onClick={() => toggleConstraint(opt.value)}
+                      className={`py-3 px-4 rounded-xl border-2 font-medium text-sm transition-colors ${
+                        selected
+                          ? 'border-brand-500 bg-brand-50 text-brand-700'
+                          : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  );
+                })}
+              </div>
+              <input
+                type="text"
+                className="input"
+                placeholder="Autre contrainte..."
+                value={obConstraintOther}
+                onChange={(e) => setObConstraintOther(e.target.value)}
+              />
+            </div>
+          )}
+        </div>
+
+        {/* Navigation fixe */}
+        <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4">
+          <div className="max-w-md mx-auto flex gap-3">
+            {obStep > 0 && (
+              <button
+                onClick={() => setObStep(obStep - 1)}
+                className="btn-secondary px-6"
+              >
+                ←
+              </button>
+            )}
+            <button
+              onClick={() => {
+                if (obStep < 4) {
+                  setObStep(obStep + 1);
+                } else {
+                  submitOnboarding();
+                }
+              }}
+              disabled={!canAdvance()}
+              className={`flex-1 py-3 rounded-lg font-semibold transition-colors ${
+                canAdvance()
+                  ? 'bg-brand-500 hover:bg-brand-600 text-white'
+                  : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+              }`}
+            >
+              {obStep === 4 ? 'Voir mon planning' : 'Continuer'}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ===== MAIN APP (post-onboarding) =====
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Banner demo */}

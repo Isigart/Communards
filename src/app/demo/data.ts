@@ -1,9 +1,12 @@
 // Donnees fictives realistes — aucune API necessaire
 
+// Budget legal HCR par repas par personne
+export const BUDGET_HCR = 4.25;
+
 export const establishment = {
   name: 'Le Bistrot du Marche',
   employee_count: 12,
-  budget_per_meal: 3.5,
+  budget_per_meal: BUDGET_HCR,
   currency: 'EUR',
   market: 'fr' as const,
 };

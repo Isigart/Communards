@@ -221,8 +221,8 @@ export default function OnboardingPage() {
         {/* Step 3: Jours de commande */}
         {step === 3 && (
           <div className="space-y-4">
-            <h2 className="text-xl font-bold text-gray-800">Quels jours commandez-vous ?</h2>
-            <p className="text-sm text-gray-500">Les suggestions seront calees entre vos livraisons</p>
+            <h2 className="text-xl font-bold text-gray-800">Quels jours etes-vous livre ?</h2>
+            <p className="text-sm text-gray-500">On organisera les repas entre chaque livraison. Par exemple, livre lundi et jeudi → les suggestions couvrent lun-mer puis jeu-dim.</p>
             <div className="grid grid-cols-4 gap-2">
               {DAY_LABELS.map((label, i) => {
                 const dayVal = DAY_VALUES[i];

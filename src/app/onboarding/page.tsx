@@ -98,6 +98,11 @@ export default function OnboardingPage() {
     });
 
     if (res.ok) {
+      // Generer les suggestions directement apres l'onboarding
+      await fetch('/api/suggestions', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
       window.location.href = '/dashboard';
     }
     setLoading(false);
@@ -303,7 +308,7 @@ export default function OnboardingPage() {
                 : 'bg-gray-200 text-gray-400 cursor-not-allowed'
             }`}
           >
-            {loading ? 'Creation...' : step === 4 ? 'Voir mon planning' : 'Continuer'}
+            {loading ? 'Preparation de votre planning...' : step === 4 ? 'Voir mon planning' : 'Continuer'}
           </button>
         </div>
       </div>

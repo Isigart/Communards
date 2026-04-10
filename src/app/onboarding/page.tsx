@@ -1,55 +1,100 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { createBrowserClient } from '@/lib/supabase';
-import type { Market } from '@/lib/types';
-import { MARKET_CONFIG } from '@/lib/types';
+import { BUDGET_HCR } from '@/lib/types';
+import { computeSpanDefinitions } from '@/lib/spans';
 
-interface FormData {
-  name: string;
-  employee_count: number;
-  budget_per_meal: number;
-  market: Market;
-  supplier_name: string;
-  delivery_days: number[];
-}
+type ServiceType = 'lunch' | 'dinner' | 'both';
 
-const DAY_LABELS = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
+const DAY_LABELS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
+const DAY_VALUES = [1, 2, 3, 4, 5, 6, 0];
+
+const CONSTRAINTS_OPTIONS = [
+  { value: 'aucune', label: 'Aucune' },
+  { value: 'vegetarien', label: 'Vegetarien' },
+  { value: 'sans-porc', label: 'Sans porc' },
+  { value: 'sans-gluten', label: 'Sans gluten' },
+];
 
 export default function OnboardingPage() {
   const [step, setStep] = useState(0);
   const [loading, setLoading] = useState(false);
-  const [form, setForm] = useState<FormData>({
-    name: '',
-    employee_count: 10,
-    budget_per_meal: 3.5,
-    market: 'fr',
-    supplier_name: 'Metro',
-    delivery_days: [1, 4],
-  });
+  const [token, setToken] = useState<string | null>(null);
 
-  const toggleDay = (day: number) => {
-    setForm((prev) => ({
-      ...prev,
-      delivery_days: prev.delivery_days.includes(day)
-        ? prev.delivery_days.filter((d) => d !== day)
-        : [...prev.delivery_days, day].sort((a, b) => a - b),
-    }));
+  // Form state
+  const [name, setName] = useState('');
+  const [service, setService] = useState<ServiceType | ''>('');
+  const [countLunch, setCountLunch] = useState(12);
+  const [countDinner, setCountDinner] = useState(8);
+  const [orderDays, setOrderDays] = useState<number[]>([]);
+  const [constraints, setConstraints] = useState<string[]>([]);
+  const [constraintOther, setConstraintOther] = useState('');
+
+  useEffect(() => {
+    const supabase = createBrowserClient();
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session) {
+        window.location.href = '/';
+        return;
+      }
+      setToken(session.access_token);
+    });
+  }, []);
+
+  const toggleOrderDay = (day: number) => {
+    setOrderDays((prev) =>
+      prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day].sort((a, b) => a - b)
+    );
+  };
+
+  const toggleConstraint = (value: string) => {
+    if (value === 'aucune') {
+      setConstraints(['aucune']);
+      return;
+    }
+    setConstraints((prev) => {
+      const without = prev.filter((c) => c !== 'aucune');
+      return without.includes(value) ? without.filter((c) => c !== value) : [...without, value];
+    });
+  };
+
+  const canAdvance = () => {
+    switch (step) {
+      case 0: return name.trim().length > 0;
+      case 1: return service !== '';
+      case 2: return service === 'both' ? countLunch > 0 && countDinner > 0 : countLunch > 0;
+      case 3: return orderDays.length > 0;
+      case 4: return true;
+      default: return false;
+    }
   };
 
   const handleSubmit = async () => {
+    if (!token) return;
     setLoading(true);
-    const supabase = createBrowserClient();
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return;
+
+    const employeeCount = service === 'both' ? countLunch + countDinner : countLunch;
+    const services = service === 'both' ? ['lunch', 'dinner'] : service === 'dinner' ? ['dinner'] : ['lunch'];
+    const allConstraints = [...constraints];
+    if (constraintOther.trim()) allConstraints.push(constraintOther.trim());
 
     const res = await fetch('/api/establishment', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${session.access_token}`,
+        Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify(form),
+      body: JSON.stringify({
+        name: name.trim(),
+        employee_count: employeeCount,
+        budget_per_meal: BUDGET_HCR,
+        market: 'fr',
+        services,
+        dietary_constraints: allConstraints.filter((c) => c !== 'aucune'),
+        supplier_name: 'Fournisseur principal',
+        delivery_days: orderDays,
+      }),
     });
 
     if (res.ok) {
@@ -58,134 +103,210 @@ export default function OnboardingPage() {
     setLoading(false);
   };
 
-  const steps = [
-    // Step 0: Establishment name
-    <div key="name" className="space-y-4">
-      <h2 className="text-lg font-semibold">Votre etablissement</h2>
-      <input
-        className="input"
-        placeholder="Nom du restaurant"
-        value={form.name}
-        onChange={(e) => setForm({ ...form, name: e.target.value })}
-      />
-      <button className="btn-primary w-full" onClick={() => setStep(1)} disabled={!form.name}>
-        Suivant
-      </button>
-    </div>,
+  const progress = ((step + 1) / 5) * 100;
 
-    // Step 1: Team size + budget
-    <div key="team" className="space-y-4">
-      <h2 className="text-lg font-semibold">Equipe & budget</h2>
-      <div>
-        <label className="block text-sm text-gray-600">Nombre d&apos;employes</label>
-        <input
-          type="number"
-          className="input mt-1"
-          value={form.employee_count}
-          onChange={(e) => setForm({ ...form, employee_count: parseInt(e.target.value) || 1 })}
-          min={1}
-          max={100}
-        />
-      </div>
-      <div>
-        <label className="block text-sm text-gray-600">
-          Budget par repas ({MARKET_CONFIG[form.market].currency})
-        </label>
-        <input
-          type="number"
-          className="input mt-1"
-          value={form.budget_per_meal}
-          onChange={(e) => setForm({ ...form, budget_per_meal: parseFloat(e.target.value) || 0 })}
-          step={0.5}
-          min={0}
-        />
-      </div>
-      <div className="flex gap-2">
-        <button className="btn-secondary flex-1" onClick={() => setStep(0)}>Retour</button>
-        <button className="btn-primary flex-1" onClick={() => setStep(2)}>Suivant</button>
-      </div>
-    </div>,
-
-    // Step 2: Market
-    <div key="market" className="space-y-4">
-      <h2 className="text-lg font-semibold">Marche</h2>
-      <div className="grid grid-cols-2 gap-2">
-        {(Object.keys(MARKET_CONFIG) as Market[]).map((m) => (
-          <button
-            key={m}
-            className={`p-3 rounded-lg border text-left ${
-              form.market === m ? 'border-brand-500 bg-brand-50' : 'border-gray-200'
-            }`}
-            onClick={() => setForm({ ...form, market: m })}
-          >
-            <span className="font-medium">{m.toUpperCase()}</span>
-            <span className="block text-xs text-gray-500">{MARKET_CONFIG[m].supplier_ref}</span>
-          </button>
-        ))}
-      </div>
-      <div className="flex gap-2">
-        <button className="btn-secondary flex-1" onClick={() => setStep(1)}>Retour</button>
-        <button className="btn-primary flex-1" onClick={() => setStep(3)}>Suivant</button>
-      </div>
-    </div>,
-
-    // Step 3: Supplier + delivery days
-    <div key="supplier" className="space-y-4">
-      <h2 className="text-lg font-semibold">Fournisseur principal</h2>
-      <input
-        className="input"
-        placeholder="Nom du fournisseur"
-        value={form.supplier_name}
-        onChange={(e) => setForm({ ...form, supplier_name: e.target.value })}
-      />
-      <div>
-        <label className="block text-sm text-gray-600 mb-2">Jours de livraison</label>
-        <div className="flex gap-1">
-          {DAY_LABELS.map((label, i) => (
-            <button
-              key={i}
-              className={`flex-1 py-2 text-sm rounded-lg ${
-                form.delivery_days.includes(i)
-                  ? 'bg-brand-500 text-white'
-                  : 'bg-gray-100 text-gray-500'
-              }`}
-              onClick={() => toggleDay(i)}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      </div>
-      <div className="flex gap-2">
-        <button className="btn-secondary flex-1" onClick={() => setStep(2)}>Retour</button>
-        <button
-          className="btn-primary flex-1"
-          onClick={handleSubmit}
-          disabled={loading || form.delivery_days.length === 0}
-        >
-          {loading ? 'Creation...' : 'Terminer'}
-        </button>
-      </div>
-    </div>,
-  ];
+  // Budget preview
+  const budgetPreview = () => {
+    if (service === 'both') {
+      return (countLunch + countDinner) * BUDGET_HCR * 5;
+    }
+    return countLunch * BUDGET_HCR * 5;
+  };
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center p-6">
-      <div className="w-full max-w-sm">
-        <div className="text-center mb-8">
-          <h1 className="text-2xl font-bold text-brand-600">Configuration</h1>
-          <p className="text-sm text-gray-500 mt-1">Etape {step + 1} / 4 — 5 minutes</p>
-          <div className="flex gap-1 mt-3">
-            {[0, 1, 2, 3].map((i) => (
-              <div
-                key={i}
-                className={`flex-1 h-1 rounded ${i <= step ? 'bg-brand-500' : 'bg-gray-200'}`}
-              />
-            ))}
-          </div>
+    <div className="min-h-screen bg-gray-50 pb-32">
+      <div className="max-w-md mx-auto px-4 pt-8">
+        {/* Progress */}
+        <div className="mb-2 flex justify-between items-center">
+          <span className="text-xs text-gray-400">Etape {step + 1} / 5</span>
+          <span className="text-xs text-brand-500 font-medium">La Table de l&apos;Equipe</span>
         </div>
-        {steps[step]}
+        <div className="h-1.5 bg-gray-200 rounded-full mb-8">
+          <div
+            className="h-full bg-brand-500 rounded-full transition-all duration-300"
+            style={{ width: `${progress}%` }}
+          />
+        </div>
+
+        {/* Step 0: Nom */}
+        {step === 0 && (
+          <div className="space-y-4">
+            <h2 className="text-xl font-bold text-gray-800">Comment s&apos;appelle votre etablissement ?</h2>
+            <input
+              type="text"
+              className="input text-lg"
+              placeholder="Le Bistrot du Marche"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              autoFocus
+            />
+          </div>
+        )}
+
+        {/* Step 1: Services */}
+        {step === 1 && (
+          <div className="space-y-4">
+            <h2 className="text-xl font-bold text-gray-800">Quels services nourrissez-vous ?</h2>
+            <div className="space-y-3">
+              {([
+                ['lunch', 'Dejeuner uniquement'],
+                ['dinner', 'Diner uniquement'],
+                ['both', 'Les deux'],
+              ] as [ServiceType, string][]).map(([value, label]) => (
+                <button
+                  key={value}
+                  onClick={() => setService(value)}
+                  className={`w-full p-4 rounded-xl border-2 text-left font-medium transition-colors ${
+                    service === value
+                      ? 'border-brand-500 bg-brand-50 text-brand-700'
+                      : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Step 2: Nombre de personnes */}
+        {step === 2 && (
+          <div className="space-y-4">
+            <h2 className="text-xl font-bold text-gray-800">Combien de personnes par service ?</h2>
+            {service === 'both' ? (
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-600 mb-2">Midi</label>
+                  <input
+                    type="number"
+                    className="input text-lg text-center"
+                    value={countLunch}
+                    onChange={(e) => setCountLunch(Math.max(1, parseInt(e.target.value) || 1))}
+                    min={1}
+                    autoFocus
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-600 mb-2">Soir</label>
+                  <input
+                    type="number"
+                    className="input text-lg text-center"
+                    value={countDinner}
+                    onChange={(e) => setCountDinner(Math.max(1, parseInt(e.target.value) || 1))}
+                    min={1}
+                  />
+                </div>
+              </div>
+            ) : (
+              <input
+                type="number"
+                className="input text-lg text-center"
+                value={countLunch}
+                onChange={(e) => setCountLunch(Math.max(1, parseInt(e.target.value) || 1))}
+                min={1}
+                autoFocus
+              />
+            )}
+            <div className="card bg-brand-50 border-brand-200">
+              <p className="text-sm text-brand-700">
+                Budget legal HCR : {BUDGET_HCR} EUR/repas/pers
+              </p>
+              <p className="text-lg font-bold text-brand-600 mt-1">
+                {budgetPreview().toFixed(0)} EUR / semaine
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Step 3: Jours de commande */}
+        {step === 3 && (
+          <div className="space-y-4">
+            <h2 className="text-xl font-bold text-gray-800">Quels jours commandez-vous ?</h2>
+            <p className="text-sm text-gray-500">Les suggestions seront calees entre vos livraisons</p>
+            <div className="grid grid-cols-4 gap-2">
+              {DAY_LABELS.map((label, i) => {
+                const dayVal = DAY_VALUES[i];
+                const selected = orderDays.includes(dayVal);
+                return (
+                  <button
+                    key={dayVal}
+                    onClick={() => toggleOrderDay(dayVal)}
+                    className={`py-3 rounded-xl border-2 font-medium text-sm transition-colors ${
+                      selected
+                        ? 'border-brand-500 bg-brand-500 text-white'
+                        : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+            {orderDays.length > 0 && (
+              <p className="text-sm text-gray-500">
+                {computeSpanDefinitions(orderDays).length} span(s) de livraison par semaine
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* Step 4: Contraintes alimentaires */}
+        {step === 4 && (
+          <div className="space-y-4">
+            <h2 className="text-xl font-bold text-gray-800">Contraintes alimentaires ?</h2>
+            <div className="grid grid-cols-2 gap-2">
+              {CONSTRAINTS_OPTIONS.map((opt) => {
+                const selected = constraints.includes(opt.value);
+                return (
+                  <button
+                    key={opt.value}
+                    onClick={() => toggleConstraint(opt.value)}
+                    className={`py-3 px-4 rounded-xl border-2 font-medium text-sm transition-colors ${
+                      selected
+                        ? 'border-brand-500 bg-brand-50 text-brand-700'
+                        : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
+            <input
+              type="text"
+              className="input"
+              placeholder="Autre contrainte..."
+              value={constraintOther}
+              onChange={(e) => setConstraintOther(e.target.value)}
+            />
+          </div>
+        )}
       </div>
-    </main>
+
+      {/* Navigation fixe */}
+      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4">
+        <div className="max-w-md mx-auto flex gap-3">
+          {step > 0 && (
+            <button onClick={() => setStep(step - 1)} className="btn-secondary px-6">
+              ←
+            </button>
+          )}
+          <button
+            onClick={() => {
+              if (step < 4) setStep(step + 1);
+              else handleSubmit();
+            }}
+            disabled={!canAdvance() || loading}
+            className={`flex-1 py-3 rounded-lg font-semibold transition-colors ${
+              canAdvance() && !loading
+                ? 'bg-brand-500 hover:bg-brand-600 text-white'
+                : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+            }`}
+          >
+            {loading ? 'Creation...' : step === 4 ? 'Voir mon planning' : 'Continuer'}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }

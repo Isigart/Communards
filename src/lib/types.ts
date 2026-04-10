@@ -2,6 +2,8 @@ export type Market = 'fr' | 'uk' | 'us' | 'au' | 'ca';
 export type MealType = 'lunch' | 'dinner';
 export type FeedbackStatus = 'done' | 'modified' | 'skipped';
 
+export const BUDGET_HCR = 4.25;
+
 export interface Establishment {
   id: string;
   user_id: string;
@@ -11,6 +13,8 @@ export interface Establishment {
   market: Market;
   currency: string;
   language: string;
+  services: string[];
+  dietary_constraints: string[];
   created_at: string;
   updated_at: string;
 }

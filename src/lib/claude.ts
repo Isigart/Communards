@@ -20,41 +20,18 @@ export async function generateSuggestions(input: GenerateInput): Promise<Omit<Su
       ).join('\n')}`
     : '';
 
-  const prompt = `Tu es un assistant culinaire pour le repas du personnel (la table de l'equipe) en restauration professionnelle.
-
-Etablissement: ${establishment.name}
-Nombre d'employes: ${establishment.employee_count}
-Budget par repas: ${establishment.budget_per_meal} ${config.currency}
-Marche: ${config.supplier_ref}
-Periode: ${span.start_date} au ${span.end_date} (${span.day_count} jours, ${span.meal_count} repas)
+  const prompt = `Repas du personnel — ${establishment.name}, ${establishment.employee_count} personnes, ${establishment.budget_per_meal} ${config.currency}/repas max.
+Periode: ${span.start_date} au ${span.end_date} (${span.day_count} jours).
 ${feedbackContext}
 
-Genere des combinaisons d'ingredients pour chaque repas de cette periode.
-Regles:
-- Pas de recettes, juste des combinaisons d'ingredients
-- Respecter le budget par repas
-- Varier les proteines, feculents, legumes
-- Privilegier les produits de saison
-- Adapter au marche local (${config.supplier_ref})
-- Si feedback "skipped" sur un ingredient, l'eviter
-- Si feedback "modified", tenir compte des ajustements
+Pour chaque jour, genere dejeuner + diner. Combinaisons d'ingredients uniquement (pas de recettes). Quantites pour ${establishment.employee_count} personnes. Varier proteines/feculents/legumes. Produits de saison.
 
-Reponds en JSON valide uniquement, sous cette forme:
-[
-  {
-    "day_index": 0,
-    "meal_date": "YYYY-MM-DD",
-    "meal_type": "lunch",
-    "ingredients": [{"name": "...", "quantity": "...", "unit": "kg", "category": "proteine"}],
-    "estimated_cost": 3.20,
-    "grocery_list": [{"name": "...", "quantity": "...", "unit": "kg", "supplier": "..."}],
-    "notes": null
-  }
-]`;
+JSON uniquement:
+[{"day_index":0,"meal_date":"YYYY-MM-DD","meal_type":"lunch","ingredients":[{"name":"...","quantity":"...","unit":"kg","category":"proteine"}],"estimated_cost":3.20,"grocery_list":[{"name":"...","quantity":"...","unit":"kg","supplier":"${config.supplier_ref}"}],"notes":null}]`;
 
   const message = await client.messages.create({
-    model: 'claude-sonnet-4-20250514',
-    max_tokens: 4096,
+    model: 'claude-haiku-4-5-20251001',
+    max_tokens: 2048,
     messages: [{ role: 'user', content: prompt }],
   });
 

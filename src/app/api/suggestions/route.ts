@@ -13,7 +13,7 @@ export async function GET(req: NextRequest) {
   const supabase = createServerClient();
   const today = new Date().toISOString().split('T')[0];
 
-  // Find current span
+  // Find current or most recent span
   const { data: currentSpan } = await supabase
     .from('supply_spans')
     .select('*')
@@ -22,31 +22,44 @@ export async function GET(req: NextRequest) {
     .gte('end_date', today)
     .single();
 
-  if (!currentSpan) {
+  // If no span covers today, get the most recent one
+  const span = currentSpan || (await supabase
+    .from('supply_spans')
+    .select('*')
+    .eq('establishment_id', auth.establishment.id)
+    .order('start_date', { ascending: false })
+    .limit(1)
+    .single()).data;
+
+  if (!span) {
     return NextResponse.json({ span: null, suggestions: [] });
   }
 
   // Check cache
-  const cacheKey = `suggestions:${auth.establishment.id}:${currentSpan.id}`;
-  const cached = await getCached<Suggestion[]>(cacheKey);
-  if (cached) {
-    return NextResponse.json({ span: currentSpan, suggestions: cached });
+  const cacheKey = `suggestions:${auth.establishment.id}:${span.id}`;
+  try {
+    const cached = await getCached<Suggestion[]>(cacheKey);
+    if (cached) {
+      return NextResponse.json({ span, suggestions: cached });
+    }
+  } catch {
+    // Redis error, skip cache
   }
 
   // Fetch from DB
   const { data: suggestions } = await supabase
     .from('suggestions')
     .select('*')
-    .eq('span_id', currentSpan.id)
+    .eq('span_id', span.id)
     .order('meal_date', { ascending: true })
     .order('meal_type', { ascending: true });
 
   if (suggestions && suggestions.length > 0) {
-    await setCache(cacheKey, suggestions, 3600);
-    return NextResponse.json({ span: currentSpan, suggestions });
+    try { await setCache(cacheKey, suggestions, 3600); } catch { /* skip */ }
+    return NextResponse.json({ span, suggestions });
   }
 
-  return NextResponse.json({ span: currentSpan, suggestions: [] });
+  return NextResponse.json({ span, suggestions: [] });
 }
 
 export async function POST(req: NextRequest) {
@@ -71,7 +84,7 @@ export async function POST(req: NextRequest) {
   const weekStart = getWeekStart(new Date());
   const spanDefs = generateWeekSpans(supplier, weekStart);
 
-  // Find or create the current span
+  // Find span that covers today, or use the first one
   const today = new Date().toISOString().split('T')[0];
   const currentSpanDef = spanDefs.find(
     (s) => s.start_date <= today && s.end_date >= today
@@ -81,25 +94,30 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Could not determine current span' }, { status: 500 });
   }
 
-  // Upsert span
-  const { data: span, error: spanError } = await supabase
+  // Check if span already exists
+  const { data: existingSpan } = await supabase
     .from('supply_spans')
-    .upsert(
-      {
-        establishment_id: auth.establishment.id,
-        supplier_id: supplier.id,
-        start_date: currentSpanDef.start_date,
-        end_date: currentSpanDef.end_date,
-        day_count: currentSpanDef.day_count,
-      },
-      { onConflict: 'establishment_id,start_date' }
-    )
-    .select()
+    .select('*')
+    .eq('establishment_id', auth.establishment.id)
+    .eq('start_date', currentSpanDef.start_date)
     .single();
 
-  if (spanError || !span) {
-    // Fallback: insert without upsert
-    const { data: newSpan } = await supabase
+  let span: SupplySpan;
+
+  if (existingSpan) {
+    span = existingSpan as SupplySpan;
+    // Check if suggestions already exist for this span
+    const { data: existingSuggestions } = await supabase
+      .from('suggestions')
+      .select('*')
+      .eq('span_id', span.id);
+
+    if (existingSuggestions && existingSuggestions.length > 0) {
+      return NextResponse.json({ span, suggestions: existingSuggestions });
+    }
+  } else {
+    // Create new span
+    const { data: newSpan, error: spanError } = await supabase
       .from('supply_spans')
       .insert({
         establishment_id: auth.establishment.id,
@@ -111,21 +129,19 @@ export async function POST(req: NextRequest) {
       .select()
       .single();
 
-    if (!newSpan) {
-      return NextResponse.json({ error: 'Failed to create span' }, { status: 500 });
+    if (spanError || !newSpan) {
+      return NextResponse.json({ error: 'Failed to create span: ' + (spanError?.message || 'unknown') }, { status: 500 });
     }
-
-    return await generateAndStore(supabase, auth, newSpan, supplier);
+    span = newSpan as SupplySpan;
   }
 
-  return await generateAndStore(supabase, auth, span, supplier);
+  return await generateAndStore(supabase, auth, span);
 }
 
 async function generateAndStore(
   supabase: ReturnType<typeof createServerClient>,
   auth: AuthContext,
   span: SupplySpan,
-  supplier: { id: string }
 ) {
   // Get recent feedback for learning
   const { data: feedback } = await supabase
@@ -137,7 +153,7 @@ async function generateAndStore(
 
   // Generate suggestions via Claude
   const generated = await generateSuggestions({
-    establishment: auth.establishment as Parameters<typeof generateSuggestions>[0]['establishment'],
+    establishment: auth.establishment,
     span,
     pastFeedback: feedback || [],
   });
@@ -158,9 +174,9 @@ async function generateAndStore(
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  // Cache
+  // Cache (ignore errors)
   const cacheKey = `suggestions:${auth.establishment.id}:${span.id}`;
-  await setCache(cacheKey, suggestions, 3600);
+  try { await setCache(cacheKey, suggestions, 3600); } catch { /* skip */ }
 
   return NextResponse.json({ span, suggestions }, { status: 201 });
 }

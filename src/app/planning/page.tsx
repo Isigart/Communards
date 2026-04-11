@@ -66,7 +66,9 @@ export default function PlanningPage() {
     );
   }
 
-  const grouped = suggestions.reduce<Record<string, Suggestion[]>>((acc, s) => {
+  const today = new Date().toISOString().split('T')[0];
+  const futureSuggestions = suggestions.filter((s) => s.meal_date >= today);
+  const grouped = futureSuggestions.reduce<Record<string, Suggestion[]>>((acc, s) => {
     if (!acc[s.meal_date]) acc[s.meal_date] = [];
     acc[s.meal_date].push(s);
     return acc;
@@ -110,6 +112,7 @@ export default function PlanningPage() {
         .map(([date, meals]) => (
           <div key={date}>
             <h2 className="font-semibold text-gray-700 mb-2">
+              {date === today && <span className="text-brand-500 mr-1">Aujourd&apos;hui —</span>}
               {new Date(date + 'T00:00:00').toLocaleDateString('fr-FR', {
                 weekday: 'long',
                 day: 'numeric',

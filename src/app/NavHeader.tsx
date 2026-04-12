@@ -6,6 +6,7 @@ import Link from 'next/link';
 const NAV_ITEMS = [
   { href: '/dashboard', label: 'Accueil' },
   { href: '/planning', label: 'Planning' },
+  { href: '/briefing', label: 'Briefing' },
 ];
 
 const HIDDEN_ON = ['/', '/onboarding', '/demo', '/enquete'];

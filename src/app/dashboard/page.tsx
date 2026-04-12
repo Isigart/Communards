@@ -107,13 +107,7 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen p-4 max-w-lg mx-auto space-y-6">
-      <header className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-bold text-brand-600">La Table de l&apos;Equipe</h1>
-          <p className="text-sm text-gray-500">{establishment?.name}</p>
-        </div>
-        <a href="/planning" className="btn-secondary text-sm">Planning</a>
-      </header>
+      <p className="text-sm text-gray-500">{establishment?.name}</p>
 
       {/* Budget */}
       <div className="card">

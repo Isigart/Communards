@@ -77,10 +77,7 @@ export default function PlanningPage() {
   return (
     <div className="min-h-screen p-4 max-w-lg mx-auto space-y-6">
       <header className="flex items-center justify-between no-print">
-        <div>
-          <a href="/dashboard" className="text-sm text-brand-500">← Dashboard</a>
-          <h1 className="text-xl font-bold mt-1">Planning</h1>
-        </div>
+        <h1 className="text-lg font-bold">Planning</h1>
         <div className="flex gap-2">
           <a href="/planning/print" className="btn-secondary text-sm">Imprimer</a>
           <button onClick={generateBriefCode} className="btn-primary text-sm">

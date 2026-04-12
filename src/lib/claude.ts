@@ -23,7 +23,8 @@ export async function generateSuggestions(input: GenerateInput): Promise<Omit<Su
   const prompt = `Repas du personnel — ${establishment.employee_count} personnes, ${establishment.budget_per_meal} ${config.currency}/repas max.
 Du ${span.start_date} au ${span.end_date} (${span.day_count} jours).
 ${feedbackContext}
-Pour chaque jour: dejeuner + diner. Ingredients + quantites pour ${establishment.employee_count} pers. Varier. Saison.
+Pour chaque jour: dejeuner + diner. Ingredients + quantites pour ${establishment.employee_count} pers.
+Regles: produits stables uniquement (pas de frais fragiles). Pas de condiments (sel, poivre, huile, vinaigre, epices de base sont deja en cuisine). Varier proteines/feculents/legumes. Saison.
 Reponds UNIQUEMENT en JSON compact, pas de texte avant/apres:
 [{"day_index":0,"meal_date":"YYYY-MM-DD","meal_type":"lunch","ingredients":[{"name":"...","quantity":"2","unit":"kg","category":"proteine"}],"estimated_cost":3.2,"grocery_list":[],"notes":null}]`;
 

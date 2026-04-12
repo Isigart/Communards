@@ -8,7 +8,6 @@ interface PrepTask {
   id: string;
   span_id: string;
   label: string;
-  for_meal: string | null;
   scheduled_day: string | null;
   scheduled_slot: string | null;
   done: boolean;
@@ -29,13 +28,10 @@ export default function PlanningPage() {
 
   useEffect(() => { loadPlanning(); }, []);
 
-  // Scroll vers aujourd'hui au chargement
   useEffect(() => {
     if (!loading && scrollRef.current) {
       const todayEl = scrollRef.current.querySelector('[data-today="true"]');
-      if (todayEl) {
-        todayEl.scrollIntoView({ inline: 'start', block: 'nearest' });
-      }
+      if (todayEl) todayEl.scrollIntoView({ inline: 'start', block: 'nearest' });
     }
   }, [loading]);
 
@@ -126,57 +122,85 @@ export default function PlanningPage() {
 
   const getMeal = (date: string, type: string) =>
     suggestions.find((s) => s.meal_date === date && s.meal_type === type);
-  const getPreps = (date: string) =>
-    prepTasks.filter((t) => t.scheduled_day === date);
+  const getPreps = (date: string, slot: string) =>
+    prepTasks.filter((t) => t.scheduled_day === date && t.scheduled_slot === slot);
   const unassigned = prepTasks.filter((t) => !t.scheduled_day);
 
   const formatDay = (date: string) => {
     const d = new Date(date + 'T00:00:00');
     const day = d.toLocaleDateString('fr-FR', { weekday: 'short' });
-    const num = d.getDate();
-    return { day: day.charAt(0).toUpperCase() + day.slice(1), num };
+    return { day: day.charAt(0).toUpperCase() + day.slice(1), num: d.getDate() };
   };
 
-  const COL_WIDTH = 140; // px par jour
+  const COL_WIDTH = 150;
+
+  // Rendu d'une cellule repas (compact)
+  const MealCell = ({ meal, isPast }: { meal: Suggestion | undefined; isPast: boolean }) => {
+    if (!meal) return null;
+    return (
+      <div
+        className="bg-white rounded-lg border border-gray-100 p-1.5 mb-1 cursor-pointer hover:border-brand-200 transition-colors"
+        onClick={() => {
+          if (!isPast && editingNote !== meal.id) {
+            setEditingNote(meal.id);
+            setDraftNote(meal.notes || '');
+          }
+        }}
+      >
+        <span className="text-[10px] font-semibold uppercase text-brand-400">
+          {meal.meal_type === 'lunch' ? 'dej' : 'din'}
+        </span>
+        {meal.ingredients.slice(0, 3).map((ing, i) => (
+          <p key={i} className="text-[11px] text-gray-700 truncate leading-tight">{ing.name}</p>
+        ))}
+        {meal.ingredients.length > 3 && (
+          <p className="text-[10px] text-gray-400">+{meal.ingredients.length - 3}</p>
+        )}
+        {meal.notes && editingNote !== meal.id && (
+          <p className="text-[10px] text-amber-700 bg-amber-50 rounded px-1 mt-1 truncate">{meal.notes}</p>
+        )}
+        {editingNote === meal.id && (
+          <div className="mt-1" onClick={(e) => e.stopPropagation()}>
+            <input
+              className="w-full border border-brand-300 rounded text-[11px] px-1 py-0.5"
+              placeholder="Note du chef..."
+              value={draftNote}
+              onChange={(e) => setDraftNote(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') saveNote(meal.id); if (e.key === 'Escape') setEditingNote(null); }}
+              autoFocus
+            />
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
-    <div className="min-h-screen pb-40">
-      <div className="p-4 max-w-4xl mx-auto">
+    <div className="min-h-screen pb-32">
+      <div className="p-4">
         <header className="flex items-center justify-between mb-3">
           <h1 className="text-lg font-bold">Planning</h1>
-          {span && (
-            <span className="text-xs text-gray-400">
-              Swipe →
-            </span>
-          )}
+          <span className="text-xs text-gray-400">← Swipe →</span>
         </header>
       </div>
 
-      {/* ===== TABLEAU HORIZONTAL ===== */}
+      {/* ===== TABLEAU ===== */}
       <div className="relative">
-        {/* Labels fixes a gauche */}
-        <div className="absolute left-0 top-0 z-10 bg-gray-50">
-          {/* Header vide */}
-          <div className="h-14 flex items-end pb-1 px-2 border-b border-gray-200">
+        {/* Labels fixes */}
+        <div className="absolute left-0 top-0 z-10 bg-gray-50 w-12">
+          <div className="h-14 border-b border-gray-200"></div>
+          <div className="h-48 flex items-center justify-center border-b border-gray-200">
+            <span className="text-xs font-bold text-gray-500 -rotate-90 whitespace-nowrap">Matin</span>
           </div>
-          {/* Dej */}
-          <div className="h-28 flex items-center px-2 border-b border-gray-100">
-            <span className="text-xs font-bold text-brand-500 -rotate-0">Dej</span>
-          </div>
-          {/* Din */}
-          <div className="h-28 flex items-center px-2 border-b border-gray-100">
-            <span className="text-xs font-bold text-brand-500">Din</span>
-          </div>
-          {/* Preps */}
-          <div className="h-24 flex items-center px-2">
-            <span className="text-xs font-bold text-violet-500">Preps</span>
+          <div className="h-48 flex items-center justify-center">
+            <span className="text-xs font-bold text-gray-500 -rotate-90 whitespace-nowrap">Soir</span>
           </div>
         </div>
 
         {/* Zone scrollable */}
         <div
           ref={scrollRef}
-          className="overflow-x-auto pl-10"
+          className="overflow-x-auto pl-12"
           style={{ scrollSnapType: 'x mandatory', WebkitOverflowScrolling: 'touch' }}
         >
           <div className="flex" style={{ width: allDates.length * COL_WIDTH }}>
@@ -186,7 +210,8 @@ export default function PlanningPage() {
               const { day, num } = formatDay(date);
               const lunch = getMeal(date, 'lunch');
               const dinner = getMeal(date, 'dinner');
-              const preps = getPreps(date);
+              const prepsMatin = getPreps(date, 'matin');
+              const prepsSoir = getPreps(date, 'soir');
 
               return (
                 <div
@@ -195,128 +220,62 @@ export default function PlanningPage() {
                   className={`flex-shrink-0 border-r border-gray-100 ${isPast ? 'opacity-40' : ''}`}
                   style={{ width: COL_WIDTH, scrollSnapAlign: 'start' }}
                 >
-                  {/* Header du jour */}
+                  {/* Header jour */}
                   <div className={`h-14 flex flex-col items-center justify-end pb-1 border-b ${
                     isToday ? 'bg-brand-50 border-brand-200' : 'border-gray-200'
                   }`}>
                     <span className={`text-[10px] uppercase ${isToday ? 'text-brand-600 font-bold' : 'text-gray-400'}`}>
                       {isToday ? 'Auj.' : day}
                     </span>
-                    <span className={`text-lg font-bold ${isToday ? 'text-brand-600' : 'text-gray-700'}`}>
-                      {num}
-                    </span>
+                    <span className={`text-lg font-bold ${isToday ? 'text-brand-600' : 'text-gray-700'}`}>{num}</span>
                   </div>
 
-                  {/* Dejeuner */}
+                  {/* === MATIN === */}
                   <div
-                    className="h-28 p-1.5 border-b border-gray-100 overflow-hidden"
-                    onClick={() => {
-                      if (lunch && !isPast && editingNote !== lunch.id) {
-                        setEditingNote(lunch.id);
-                        setDraftNote(lunch.notes || '');
-                      }
-                    }}
-                  >
-                    {lunch ? (
-                      <div className="h-full">
-                        <div className="space-y-0.5">
-                          {lunch.ingredients.slice(0, 3).map((ing, i) => (
-                            <p key={i} className="text-[11px] text-gray-700 truncate">{ing.name}</p>
-                          ))}
-                          {lunch.ingredients.length > 3 && (
-                            <p className="text-[10px] text-gray-400">+{lunch.ingredients.length - 3}</p>
-                          )}
-                        </div>
-                        {lunch.notes && editingNote !== lunch.id && (
-                          <p className="text-[10px] text-amber-700 bg-amber-50 rounded px-1 mt-1 truncate">{lunch.notes}</p>
-                        )}
-                        {editingNote === lunch.id && (
-                          <div className="mt-1" onClick={(e) => e.stopPropagation()}>
-                            <input
-                              className="w-full border border-brand-300 rounded text-[11px] px-1 py-0.5"
-                              placeholder="Note..."
-                              value={draftNote}
-                              onChange={(e) => setDraftNote(e.target.value)}
-                              onKeyDown={(e) => { if (e.key === 'Enter') saveNote(lunch.id); if (e.key === 'Escape') setEditingNote(null); }}
-                              autoFocus
-                            />
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      <p className="text-[10px] text-gray-200 text-center mt-4">—</p>
-                    )}
-                  </div>
-
-                  {/* Diner */}
-                  <div
-                    className="h-28 p-1.5 border-b border-gray-100 overflow-hidden"
-                    onClick={() => {
-                      if (dinner && !isPast && editingNote !== dinner.id) {
-                        setEditingNote(dinner.id);
-                        setDraftNote(dinner.notes || '');
-                      }
-                    }}
-                  >
-                    {dinner ? (
-                      <div className="h-full">
-                        <div className="space-y-0.5">
-                          {dinner.ingredients.slice(0, 3).map((ing, i) => (
-                            <p key={i} className="text-[11px] text-gray-700 truncate">{ing.name}</p>
-                          ))}
-                          {dinner.ingredients.length > 3 && (
-                            <p className="text-[10px] text-gray-400">+{dinner.ingredients.length - 3}</p>
-                          )}
-                        </div>
-                        {dinner.notes && editingNote !== dinner.id && (
-                          <p className="text-[10px] text-amber-700 bg-amber-50 rounded px-1 mt-1 truncate">{dinner.notes}</p>
-                        )}
-                        {editingNote === dinner.id && (
-                          <div className="mt-1" onClick={(e) => e.stopPropagation()}>
-                            <input
-                              className="w-full border border-brand-300 rounded text-[11px] px-1 py-0.5"
-                              placeholder="Note..."
-                              value={draftNote}
-                              onChange={(e) => setDraftNote(e.target.value)}
-                              onKeyDown={(e) => { if (e.key === 'Enter') saveNote(dinner.id); if (e.key === 'Escape') setEditingNote(null); }}
-                              autoFocus
-                            />
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      <p className="text-[10px] text-gray-200 text-center mt-4">—</p>
-                    )}
-                  </div>
-
-                  {/* Preps */}
-                  <div
-                    className="h-24 p-1.5 overflow-hidden"
+                    className={`h-48 p-1 border-b border-gray-200 overflow-y-auto ${
+                      dragging ? 'bg-violet-50/50' : ''
+                    }`}
                     onDragOver={(e) => e.preventDefault()}
-                    onDrop={() => {
-                      if (dragging) {
-                        moveTask(dragging, date, 'matin');
-                        setDragging(null);
-                      }
-                    }}
+                    onDrop={() => { if (dragging) { moveTask(dragging, date, 'matin'); setDragging(null); } }}
                   >
-                    <div className={`min-h-full rounded-lg p-0.5 transition-colors ${
-                      dragging ? 'border border-dashed border-violet-300 bg-violet-50' : ''
-                    }`}>
-                      {preps.map((task) => (
-                        <div
-                          key={task.id}
-                          draggable
-                          onDragStart={() => setDragging(task.id)}
-                          className="bg-violet-100 text-violet-700 rounded px-1.5 py-0.5 text-[11px] font-medium mb-0.5 cursor-grab active:cursor-grabbing flex items-center justify-between"
-                        >
-                          <span className="truncate">{task.label}</span>
-                          {!isPast && (
-                            <button onClick={() => deleteTask(task.id)} className="text-violet-400 hover:text-red-500 ml-1 text-[10px] shrink-0">x</button>
-                          )}
-                        </div>
-                      ))}
-                    </div>
+                    {/* Repas du midi */}
+                    <MealCell meal={lunch} isPast={isPast} />
+                    {/* Preps du matin */}
+                    {prepsMatin.map((task) => (
+                      <div
+                        key={task.id}
+                        draggable
+                        onDragStart={() => setDragging(task.id)}
+                        className="bg-violet-100 text-violet-700 rounded px-1.5 py-0.5 text-[11px] font-medium mb-0.5 cursor-grab active:cursor-grabbing flex items-center justify-between"
+                      >
+                        <span className="truncate">{task.label}</span>
+                        {!isPast && <button onClick={() => deleteTask(task.id)} className="text-violet-400 hover:text-red-500 ml-1 text-[10px] shrink-0">x</button>}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* === SOIR === */}
+                  <div
+                    className={`h-48 p-1 overflow-y-auto ${
+                      dragging ? 'bg-violet-50/50' : ''
+                    }`}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={() => { if (dragging) { moveTask(dragging, date, 'soir'); setDragging(null); } }}
+                  >
+                    {/* Repas du soir */}
+                    <MealCell meal={dinner} isPast={isPast} />
+                    {/* Preps du soir */}
+                    {prepsSoir.map((task) => (
+                      <div
+                        key={task.id}
+                        draggable
+                        onDragStart={() => setDragging(task.id)}
+                        className="bg-violet-100 text-violet-700 rounded px-1.5 py-0.5 text-[11px] font-medium mb-0.5 cursor-grab active:cursor-grabbing flex items-center justify-between"
+                      >
+                        <span className="truncate">{task.label}</span>
+                        {!isPast && <button onClick={() => deleteTask(task.id)} className="text-violet-400 hover:text-red-500 ml-1 text-[10px] shrink-0">x</button>}
+                      </div>
+                    ))}
                   </div>
                 </div>
               );
@@ -325,22 +284,17 @@ export default function PlanningPage() {
         </div>
       </div>
 
-      {/* ===== ZONE PREPS NON PLACEES + AJOUT ===== */}
-      <div className="p-4 max-w-4xl mx-auto space-y-3 mt-4">
+      {/* ===== PREPS NON PLACEES + AJOUT ===== */}
+      <div className="p-4 space-y-3 mt-2">
         {unassigned.length > 0 && (
           <div
             className={`p-3 rounded-lg border-2 border-dashed transition-colors ${
-              dragging ? 'border-red-300 bg-red-50' : 'border-gray-200 bg-gray-50'
+              dragging ? 'border-red-300 bg-red-50' : 'border-violet-200 bg-violet-50'
             }`}
             onDragOver={(e) => e.preventDefault()}
-            onDrop={() => {
-              if (dragging) {
-                moveTask(dragging, null, null);
-                setDragging(null);
-              }
-            }}
+            onDrop={() => { if (dragging) { moveTask(dragging, null, null); setDragging(null); } }}
           >
-            <p className="text-xs font-medium text-gray-500 mb-2">Preps a placer — glisser vers un jour</p>
+            <p className="text-xs font-medium text-violet-500 mb-2">A placer — glisser vers un creneau</p>
             <div className="flex flex-wrap gap-2">
               {unassigned.map((task) => (
                 <div

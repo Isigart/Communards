@@ -149,14 +149,24 @@ export default function PlanningPage() {
   }
 
   const today = new Date().toISOString().split('T')[0];
-  const futureSuggestions = suggestions.filter((s) => s.meal_date >= today);
-  const grouped = futureSuggestions.reduce<Record<string, Suggestion[]>>((acc, s) => {
+
+  // Toutes les suggestions du span (pas de filtre sur today)
+  const grouped = suggestions.reduce<Record<string, Suggestion[]>>((acc, s) => {
     if (!acc[s.meal_date]) acc[s.meal_date] = [];
     acc[s.meal_date].push(s);
     return acc;
   }, {});
 
-  const sortedDates = Object.keys(grouped).sort();
+  // Generer toutes les dates du span
+  const allSpanDates: string[] = [];
+  if (span) {
+    const start = new Date(span.start_date + 'T00:00:00');
+    const end = new Date(span.end_date + 'T00:00:00');
+    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+      allSpanDates.push(d.toISOString().split('T')[0]);
+    }
+  }
+  const sortedDates = allSpanDates.length > 0 ? allSpanDates : Object.keys(grouped).sort();
   const unassignedTasks = prepTasks.filter((t) => !t.scheduled_day);
 
   return (
@@ -171,10 +181,13 @@ export default function PlanningPage() {
       </header>
 
       {/* ===== GRILLE REPAS + NOTES ===== */}
-      {sortedDates.map((date) => (
-        <div key={date}>
+      {sortedDates.map((date) => {
+        const isPast = date < today;
+        const isToday = date === today;
+        return (
+        <div key={date} className={isPast ? 'opacity-50' : ''}>
           <h2 className="font-semibold text-gray-700 mb-2">
-            {date === today && <span className="text-brand-500 mr-1">Aujourd&apos;hui —</span>}
+            {isToday && <span className="text-brand-500 mr-1">Aujourd&apos;hui —</span>}
             {new Date(date + 'T00:00:00').toLocaleDateString('fr-FR', {
               weekday: 'long',
               day: 'numeric',
@@ -182,7 +195,7 @@ export default function PlanningPage() {
             })}
           </h2>
           <div className="space-y-2">
-            {grouped[date].map((s) => (
+            {(grouped[date] || []).map((s) => (
               <div key={s.id} className="card">
                 <div className="flex justify-between items-center mb-1">
                   <span className="text-xs font-semibold uppercase text-brand-500">
@@ -248,7 +261,8 @@ export default function PlanningPage() {
             ))}
           </div>
         </div>
-      ))}
+        );
+      })}
 
       {/* ===== ORGANISATION DES PREPS ===== */}
       <section>

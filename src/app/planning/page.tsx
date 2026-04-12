@@ -80,7 +80,10 @@ export default function PlanningPage() {
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify({ span_id: span.id, label: newTaskLabel.trim() }),
     });
-    if (res.ok) setPrepTasks((prev) => [...prev, await res.json()]);
+    if (res.ok) {
+      const task = await res.json();
+      setPrepTasks((prev) => [...prev, task]);
+    }
     setNewTaskLabel('');
   }, [newTaskLabel, token, span]);
 

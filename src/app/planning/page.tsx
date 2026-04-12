@@ -180,13 +180,11 @@ export default function PlanningPage() {
   };
 
   return (
-    <div className="min-h-screen pb-32">
-      <div className="p-4">
-        <header className="flex items-center justify-between mb-3">
-          <h1 className="text-lg font-bold">Planning</h1>
-          <span className="text-xs text-gray-400">← Swipe →</span>
-        </header>
-      </div>
+    <div className="min-h-screen pb-32 p-4 max-w-lg mx-auto">
+      <header className="flex items-center justify-between mb-3">
+        <h1 className="text-lg font-bold">Planning</h1>
+        <span className="text-xs text-gray-400">← Swipe →</span>
+      </header>
 
       {/* ===== TABLEAU ===== */}
       <div className="relative">
@@ -289,7 +287,7 @@ export default function PlanningPage() {
       </div>
 
       {/* ===== PREPS NON PLACEES + AJOUT ===== */}
-      <div className="p-4 space-y-3 mt-2">
+      <div className="space-y-3 mt-4">
         {unassigned.length > 0 && (
           <div
             className={`p-3 rounded-lg border-2 border-dashed transition-colors ${

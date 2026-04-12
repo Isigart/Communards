@@ -62,17 +62,36 @@ export default function DashboardPage() {
     const token = await getToken();
     if (!token) return;
 
+    // Etape 1: creer le span (rapide)
     const res = await fetch('/api/suggestions', {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}` },
     });
 
-    if (res.ok) {
-      const data = await res.json();
-      setCurrentSpan(data.span);
-      setSuggestions(data.suggestions || []);
+    if (!res.ok) { setGenerating(false); return; }
+    const data = await res.json();
+    setCurrentSpan(data.span);
+
+    if (data.status === 'ready') {
+      // Suggestions deja generees
+      await loadDashboard();
+      setGenerating(false);
+      return;
     }
 
+    // Etape 2: generer les suggestions (peut prendre 10-15s)
+    const genRes = await fetch('/api/suggestions/generate', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ span_id: data.span.id }),
+    });
+
+    if (genRes.ok) {
+      await loadDashboard();
+    }
     setGenerating(false);
   }
 

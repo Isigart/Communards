@@ -98,11 +98,25 @@ export default function OnboardingPage() {
     });
 
     if (res.ok) {
-      // Generer les suggestions directement apres l'onboarding
-      await fetch('/api/suggestions', {
+      // Etape 1 : creer le span
+      const spanRes = await fetch('/api/suggestions', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
       });
+      if (spanRes.ok) {
+        const spanData = await spanRes.json();
+        if (spanData.status === 'pending' && spanData.span) {
+          // Etape 2 : generer via Claude
+          await fetch('/api/suggestions/generate', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ span_id: spanData.span.id }),
+          });
+        }
+      }
       window.location.href = '/dashboard';
     }
     setLoading(false);

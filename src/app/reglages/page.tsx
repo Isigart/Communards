@@ -129,8 +129,8 @@ export default function ReglagesPage() {
       }),
     });
 
-    // Regenerer les suggestions avec les nouveaux reglages
-    await fetch('/api/suggestions', {
+    // Regenerer : etape 1 creer le span
+    const spanRes = await fetch('/api/suggestions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -138,6 +138,21 @@ export default function ReglagesPage() {
       },
       body: JSON.stringify({ regenerate: true }),
     });
+
+    if (spanRes.ok) {
+      const spanData = await spanRes.json();
+      if (spanData.status === 'pending' && spanData.span) {
+        // Etape 2 : generer via Claude
+        await fetch('/api/suggestions/generate', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ span_id: spanData.span.id }),
+        });
+      }
+    }
 
     setSaving(false);
     setSaved(true);

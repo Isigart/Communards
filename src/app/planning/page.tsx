@@ -7,7 +7,6 @@ import type { Suggestion, SupplySpan } from '@/lib/types';
 interface PrepTask {
   id: string;
   span_id: string;
-  suggestion_id: string | null;
   label: string;
   for_meal: string | null;
   scheduled_day: string | null;
@@ -25,8 +24,7 @@ export default function PlanningPage() {
   const [editingNote, setEditingNote] = useState<string | null>(null);
   const [draftNote, setDraftNote] = useState('');
   const [newTaskLabel, setNewTaskLabel] = useState('');
-  const [newTaskDay, setNewTaskDay] = useState('');
-  const [newTaskSlot, setNewTaskSlot] = useState('matin');
+  const [dragging, setDragging] = useState<string | null>(null);
 
   useEffect(() => { loadPlanning(); }, []);
 
@@ -73,16 +71,23 @@ export default function PlanningPage() {
     const res = await fetch('/api/prep-tasks', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({
-        span_id: span.id,
-        label: newTaskLabel.trim(),
-        scheduled_day: newTaskDay || null,
-        scheduled_slot: newTaskSlot || null,
-      }),
+      body: JSON.stringify({ span_id: span.id, label: newTaskLabel.trim() }),
     });
     if (res.ok) setPrepTasks((prev) => [...prev, await res.json()]);
     setNewTaskLabel('');
-  }, [newTaskLabel, newTaskDay, newTaskSlot, token, span]);
+  }, [newTaskLabel, token, span]);
+
+  async function moveTask(taskId: string, day: string | null, slot: string | null) {
+    if (!token) return;
+    await fetch('/api/prep-tasks', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ id: taskId, scheduled_day: day, scheduled_slot: slot }),
+    });
+    setPrepTasks((prev) =>
+      prev.map((t) => t.id === taskId ? { ...t, scheduled_day: day, scheduled_slot: slot } : t)
+    );
+  }
 
   async function deleteTask(taskId: string) {
     if (!token) return;
@@ -94,21 +99,10 @@ export default function PlanningPage() {
   }
 
   if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <p className="text-gray-500">Chargement...</p>
-      </div>
-    );
+    return <div className="flex min-h-screen items-center justify-center"><p className="text-gray-500">Chargement...</p></div>;
   }
 
   const today = new Date().toISOString().split('T')[0];
-
-  // Grouper les suggestions par date
-  const grouped = suggestions.reduce<Record<string, Suggestion[]>>((acc, s) => {
-    if (!acc[s.meal_date]) acc[s.meal_date] = [];
-    acc[s.meal_date].push(s);
-    return acc;
-  }, {});
 
   // Toutes les dates du span
   const allDates: string[] = [];
@@ -120,22 +114,25 @@ export default function PlanningPage() {
     }
   }
 
-  const formatDay = (date: string) =>
-    new Date(date + 'T00:00:00').toLocaleDateString('fr-FR', {
-      weekday: 'long',
-      day: 'numeric',
-      month: 'long',
-    });
+  // Lookup rapide
+  const getMeal = (date: string, type: string) =>
+    suggestions.find((s) => s.meal_date === date && s.meal_type === type);
+
+  const getPreps = (date: string) =>
+    prepTasks.filter((t) => t.scheduled_day === date);
+
+  const unassigned = prepTasks.filter((t) => !t.scheduled_day);
 
   const formatShort = (date: string) =>
-    new Date(date + 'T00:00:00').toLocaleDateString('fr-FR', {
-      weekday: 'short',
-      day: 'numeric',
-    });
+    new Date(date + 'T00:00:00').toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric' });
+
+  // Lignes du tableau : Dejeuner, Diner, Preps
+  const rows = ['lunch', 'dinner', 'prep'] as const;
+  const rowLabels = { lunch: 'Dej', dinner: 'Din', prep: 'Preps' };
 
   return (
-    <div className="min-h-screen p-4 max-w-lg mx-auto space-y-6 pb-24">
-      <header className="flex items-center justify-between">
+    <div className="min-h-screen p-4 max-w-4xl mx-auto pb-24">
+      <header className="flex items-center justify-between mb-4">
         <h1 className="text-lg font-bold">Planning</h1>
         {span && (
           <span className="text-xs text-gray-400">
@@ -144,164 +141,180 @@ export default function PlanningPage() {
         )}
       </header>
 
-      {/* ===== VUE PAR JOUR ===== */}
-      {allDates.map((date) => {
-        const isPast = date < today;
-        const isToday = date === today;
-        const meals = grouped[date] || [];
-        const dayPrepsMatin = prepTasks.filter((t) => t.scheduled_day === date && t.scheduled_slot === 'matin');
-        const dayPrepsAprem = prepTasks.filter((t) => t.scheduled_day === date && t.scheduled_slot === 'aprem');
-        const hasPreps = dayPrepsMatin.length > 0 || dayPrepsAprem.length > 0;
+      {/* ===== TABLEAU PLANNING ===== */}
+      <div className="overflow-x-auto -mx-4 px-4">
+        <table className="w-full border-collapse min-w-[600px]">
+          <thead>
+            <tr>
+              <th className="w-14 text-left text-xs text-gray-400 pb-2"></th>
+              {allDates.map((date) => {
+                const isToday = date === today;
+                const isPast = date < today;
+                return (
+                  <th
+                    key={date}
+                    className={`text-center text-xs font-semibold pb-2 capitalize ${
+                      isToday ? 'text-brand-600' : isPast ? 'text-gray-300' : 'text-gray-600'
+                    }`}
+                  >
+                    {isToday && <span className="block text-brand-500 text-[10px]">Auj.</span>}
+                    {formatShort(date)}
+                  </th>
+                );
+              })}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row} className="border-t border-gray-100">
+                <td className={`py-2 pr-2 align-top text-xs font-semibold ${
+                  row === 'prep' ? 'text-violet-500' : 'text-brand-500'
+                }`}>
+                  {rowLabels[row]}
+                </td>
+                {allDates.map((date) => {
+                  const isPast = date < today;
 
-        return (
-          <div key={date} className={isPast ? 'opacity-40' : ''}>
-            {/* En-tete du jour */}
-            <h2 className={`font-semibold mb-2 capitalize ${isToday ? 'text-brand-600' : 'text-gray-700'}`}>
-              {isToday && 'Aujourd\u2019hui — '}
-              {formatDay(date)}
-            </h2>
+                  if (row === 'prep') {
+                    // Cellule prep — drop zone
+                    const preps = getPreps(date);
+                    return (
+                      <td
+                        key={date}
+                        className={`py-2 px-1 align-top ${isPast ? 'opacity-40' : ''}`}
+                        onDragOver={(e) => e.preventDefault()}
+                        onDrop={() => {
+                          if (dragging) {
+                            moveTask(dragging, date, 'matin');
+                            setDragging(null);
+                          }
+                        }}
+                      >
+                        <div className={`min-h-[36px] rounded-lg p-1 transition-colors ${
+                          dragging ? 'border-2 border-dashed border-violet-300 bg-violet-50' : ''
+                        }`}>
+                          {preps.map((task) => (
+                            <div
+                              key={task.id}
+                              draggable
+                              onDragStart={() => setDragging(task.id)}
+                              className="bg-violet-100 text-violet-700 border border-violet-200 rounded px-1.5 py-0.5 text-[11px] font-medium mb-0.5 cursor-grab active:cursor-grabbing flex items-center justify-between"
+                            >
+                              <span className="truncate">{task.label}</span>
+                              {!isPast && (
+                                <button onClick={() => deleteTask(task.id)} className="text-violet-400 hover:text-red-500 ml-1 text-[10px]">x</button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </td>
+                    );
+                  }
 
-            <div className="space-y-2">
-              {/* === REPAS === */}
-              {meals.map((s) => (
-                <div key={s.id} className="bg-white rounded-xl border border-gray-100 shadow-sm p-3">
-                  <div className="flex justify-between items-center mb-1">
-                    <span className="text-xs font-semibold uppercase text-brand-500">
-                      {s.meal_type === 'lunch' ? 'Dejeuner' : 'Diner'}
-                    </span>
-                    {s.estimated_cost && (
-                      <span className="text-xs text-gray-400">~{s.estimated_cost} EUR</span>
-                    )}
-                  </div>
+                  // Cellule repas (dejeuner ou diner)
+                  const meal = getMeal(date, row);
+                  return (
+                    <td key={date} className={`py-2 px-1 align-top ${isPast ? 'opacity-40' : ''}`}>
+                      {meal ? (
+                        <div
+                          className="bg-white rounded-lg border border-gray-100 p-1.5 hover:border-brand-200 cursor-pointer transition-colors"
+                          onClick={() => {
+                            if (!isPast && editingNote !== meal.id) {
+                              setEditingNote(meal.id);
+                              setDraftNote(meal.notes || '');
+                            }
+                          }}
+                        >
+                          {/* Ingredients */}
+                          {meal.ingredients.map((ing, i) => (
+                            <p key={i} className="text-[11px] text-gray-700 leading-tight">
+                              {ing.name}
+                            </p>
+                          ))}
 
-                  {/* Ingredients */}
-                  <div className="flex flex-wrap gap-1 mb-1">
-                    {s.ingredients.map((ing, i) => (
-                      <span key={i} className="text-sm bg-brand-50 text-brand-700 rounded-full px-2.5 py-0.5">
-                        {ing.name} <span className="opacity-50 text-xs">{ing.quantity}{ing.unit}</span>
-                      </span>
-                    ))}
-                  </div>
+                          {/* Note du chef */}
+                          {meal.notes && editingNote !== meal.id && (
+                            <p className="text-[10px] text-amber-700 bg-amber-50 rounded px-1 py-0.5 mt-1">{meal.notes}</p>
+                          )}
 
-                  {/* Note du chef */}
-                  {s.notes && editingNote !== s.id && (
-                    <div
-                      className="mt-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 flex justify-between items-start cursor-pointer"
-                      onClick={() => { setEditingNote(s.id); setDraftNote(s.notes || ''); }}
-                    >
-                      <p className="text-sm text-amber-800">{s.notes}</p>
-                      <span className="text-xs text-amber-400 ml-2 shrink-0">modifier</span>
-                    </div>
-                  )}
+                          {/* Edition note */}
+                          {editingNote === meal.id && (
+                            <div className="mt-1" onClick={(e) => e.stopPropagation()}>
+                              <textarea
+                                className="w-full border border-gray-300 rounded text-[11px] px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-brand-400"
+                                rows={2}
+                                placeholder="Note..."
+                                value={draftNote}
+                                onChange={(e) => setDraftNote(e.target.value)}
+                                autoFocus
+                              />
+                              <div className="flex gap-1 mt-0.5">
+                                <button onClick={() => saveNote(meal.id)} className="text-[10px] py-0.5 px-2 rounded bg-brand-500 text-white">OK</button>
+                                <button onClick={() => { setEditingNote(null); setDraftNote(''); }} className="text-[10px] py-0.5 px-2 rounded bg-gray-100 text-gray-500">x</button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <p className="text-[10px] text-gray-200 text-center">—</p>
+                      )}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
 
-                  {editingNote === s.id ? (
-                    <div className="mt-2 space-y-2">
-                      <textarea
-                        className="input text-sm"
-                        rows={2}
-                        placeholder="Note du chef..."
-                        value={draftNote}
-                        onChange={(e) => setDraftNote(e.target.value)}
-                        autoFocus
-                      />
-                      <div className="flex gap-2">
-                        <button onClick={() => saveNote(s.id)} className="text-sm py-1 px-3 rounded-lg bg-brand-500 text-white">OK</button>
-                        <button onClick={() => { setEditingNote(null); setDraftNote(''); }} className="text-sm py-1 px-3 rounded-lg bg-gray-100 text-gray-500">Annuler</button>
-                      </div>
-                    </div>
-                  ) : !s.notes && !isPast && (
-                    <button
-                      onClick={() => { setEditingNote(s.id); setDraftNote(''); }}
-                      className="mt-1 text-xs text-gray-400 hover:text-brand-500"
-                    >
-                      + note du chef
-                    </button>
-                  )}
+      {/* ===== ZONE NON PLACEES + AJOUT ===== */}
+      <div className="mt-6 space-y-3">
+        {/* Preps non placees */}
+        {unassigned.length > 0 && (
+          <div
+            className={`p-3 rounded-lg border-2 border-dashed transition-colors ${
+              dragging ? 'border-red-300 bg-red-50' : 'border-gray-200 bg-gray-50'
+            }`}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={() => {
+              if (dragging) {
+                moveTask(dragging, null, null);
+                setDragging(null);
+              }
+            }}
+          >
+            <p className="text-xs font-medium text-gray-500 mb-2">Preps a placer</p>
+            <div className="flex flex-wrap gap-2">
+              {unassigned.map((task) => (
+                <div
+                  key={task.id}
+                  draggable
+                  onDragStart={() => setDragging(task.id)}
+                  className="bg-violet-100 text-violet-700 border border-violet-200 rounded-lg px-3 py-1.5 text-xs font-medium cursor-grab active:cursor-grabbing shadow-sm inline-flex items-center"
+                >
+                  {task.label}
+                  <button onClick={() => deleteTask(task.id)} className="ml-2 text-violet-400 hover:text-red-500 text-xs">x</button>
                 </div>
               ))}
-
-              {/* === PREPS DU JOUR (couleur violette) === */}
-              {hasPreps && (
-                <div className="bg-violet-50 rounded-xl border border-violet-200 p-3">
-                  <span className="text-xs font-semibold uppercase text-violet-500 mb-2 block">Preps</span>
-
-                  {dayPrepsMatin.length > 0 && (
-                    <div className="mb-2">
-                      <span className="text-xs text-violet-400">Matin</span>
-                      <div className="flex flex-wrap gap-1 mt-1">
-                        {dayPrepsMatin.map((task) => (
-                          <span key={task.id} className="text-sm bg-violet-100 text-violet-700 border border-violet-200 rounded-full px-2.5 py-0.5 inline-flex items-center">
-                            {task.label}
-                            {!isPast && (
-                              <button onClick={() => deleteTask(task.id)} className="ml-1.5 text-violet-400 hover:text-red-500 text-xs">x</button>
-                            )}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {dayPrepsAprem.length > 0 && (
-                    <div>
-                      <span className="text-xs text-violet-400">Apres-midi</span>
-                      <div className="flex flex-wrap gap-1 mt-1">
-                        {dayPrepsAprem.map((task) => (
-                          <span key={task.id} className="text-sm bg-violet-100 text-violet-700 border border-violet-200 rounded-full px-2.5 py-0.5 inline-flex items-center">
-                            {task.label}
-                            {!isPast && (
-                              <button onClick={() => deleteTask(task.id)} className="ml-1.5 text-violet-400 hover:text-red-500 text-xs">x</button>
-                            )}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Pas de repas ce jour */}
-              {meals.length === 0 && !hasPreps && (
-                <p className="text-xs text-gray-300 italic">Pas de repas prevu</p>
-              )}
             </div>
           </div>
-        );
-      })}
+        )}
 
-      {/* ===== AJOUTER UNE PREP ===== */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-3">
-        <div className="max-w-lg mx-auto flex gap-2">
+        {/* Ajouter une prep */}
+        <div className="flex gap-2">
           <input
             className="input text-sm flex-1"
-            placeholder="Nouvelle prep..."
+            placeholder="Nouvelle prep (ex: puree, marinade...)"
             value={newTaskLabel}
             onChange={(e) => setNewTaskLabel(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && addPrepTask()}
           />
-          <select
-            className="input text-sm w-24"
-            value={newTaskDay}
-            onChange={(e) => setNewTaskDay(e.target.value)}
-          >
-            <option value="">Jour</option>
-            {allDates.filter((d) => d >= today).map((d) => (
-              <option key={d} value={d}>{formatShort(d)}</option>
-            ))}
-          </select>
-          <select
-            className="input text-sm w-20"
-            value={newTaskSlot}
-            onChange={(e) => setNewTaskSlot(e.target.value)}
-          >
-            <option value="matin">Matin</option>
-            <option value="aprem">Aprem</option>
-          </select>
           <button
             onClick={addPrepTask}
-            className="bg-violet-500 hover:bg-violet-600 text-white text-sm font-semibold px-3 rounded-lg"
+            className="bg-violet-500 hover:bg-violet-600 text-white text-sm font-semibold px-4 rounded-lg"
             disabled={!newTaskLabel.trim()}
           >
-            +
+            + Prep
           </button>
         </div>
       </div>

@@ -7,6 +7,7 @@ const NAV_ITEMS = [
   { href: '/dashboard', label: 'Accueil' },
   { href: '/planning', label: 'Planning' },
   { href: '/briefing', label: 'Briefing' },
+  { href: '/reglages', label: 'Reglages' },
 ];
 
 const HIDDEN_ON = ['/', '/onboarding', '/demo', '/enquete'];

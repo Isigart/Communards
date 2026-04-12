@@ -135,7 +135,8 @@ export default function PlanningPage() {
     return { day: day.charAt(0).toUpperCase() + day.slice(1), num: d.getDate() };
   };
 
-  const COL_WIDTH = 150;
+  // ~3 jours visibles sur mobile (ecran 375px - 48px labels = 327px / 3 ≈ 109px)
+  const COL_WIDTH = 109;
 
   // Rendu d'une cellule repas (compact)
   const MealCell = ({ meal, isPast }: { meal: Suggestion | undefined; isPast: boolean }) => {

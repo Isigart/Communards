@@ -226,8 +226,8 @@ export default function OnboardingPage() {
         {/* Step 3: Jours de commande */}
         {step === 3 && (
           <div className="space-y-4">
-            <h2 className="text-xl font-bold text-gray-800">Quels jours etes-vous livre ?</h2>
-            <p className="text-sm text-gray-500">On organisera les repas entre chaque livraison. Par exemple, livre lundi et jeudi → les suggestions couvrent lun-mer puis jeu-dim.</p>
+            <h2 className="text-xl font-bold text-gray-800">Quels jours passez-vous commande ?</h2>
+            <p className="text-sm text-gray-500">On organise les repas entre chaque commande. Par exemple, commande mardi et vendredi → les suggestions couvrent mar-jeu puis ven-lun.</p>
             <div className="grid grid-cols-4 gap-2">
               {DAY_LABELS.map((label, i) => {
                 const dayVal = DAY_VALUES[i];
@@ -249,7 +249,7 @@ export default function OnboardingPage() {
             </div>
             {orderDays.length > 0 && (
               <p className="text-sm text-gray-500">
-                {computeSpanDefinitions(orderDays).length} span(s) de livraison par semaine
+                {computeSpanDefinitions(orderDays).length} periode(s) entre commandes par semaine
               </p>
             )}
           </div>

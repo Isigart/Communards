@@ -211,8 +211,8 @@ export default function ReglagesPage() {
 
       {/* Jours de livraison */}
       <section className="card space-y-3">
-        <h2 className="text-sm font-semibold text-gray-700">Jours de livraison</h2>
-        <p className="text-xs text-gray-500">Les suggestions s&apos;organisent entre vos livraisons</p>
+        <h2 className="text-sm font-semibold text-gray-700">Jours de commande</h2>
+        <p className="text-xs text-gray-500">Les suggestions s&apos;organisent entre vos commandes</p>
         <div className="grid grid-cols-4 gap-2">
           {DAY_LABELS.map((label, i) => {
             const dayVal = DAY_VALUES[i];
@@ -234,7 +234,7 @@ export default function ReglagesPage() {
         </div>
         {deliveryDays.length > 0 && (
           <p className="text-xs text-gray-400">
-            {computeSpanDefinitions(deliveryDays).length} span(s) par semaine
+            {computeSpanDefinitions(deliveryDays).length} periode(s) entre commandes par semaine
           </p>
         )}
       </section>

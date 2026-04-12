@@ -129,9 +129,19 @@ export default function ReglagesPage() {
       }),
     });
 
+    // Regenerer les suggestions avec les nouveaux reglages
+    await fetch('/api/suggestions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ regenerate: true }),
+    });
+
     setSaving(false);
     setSaved(true);
-    setTimeout(() => setSaved(false), 3000);
+    window.location.href = '/dashboard';
   }
 
   if (loading) {
@@ -267,7 +277,7 @@ export default function ReglagesPage() {
             disabled={saving}
             className="btn-primary w-full py-3"
           >
-            {saving ? 'Enregistrement...' : saved ? 'Enregistre !' : 'Enregistrer les modifications'}
+            {saving ? 'Enregistrement et regeneration...' : 'Enregistrer et regenerer'}
           </button>
         </div>
       </div>

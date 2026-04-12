@@ -104,8 +104,42 @@ export async function POST(req: NextRequest) {
 
   let span: SupplySpan;
 
+  // Check if regeneration is requested
+  let forceRegenerate = false;
+  try {
+    const body = await req.json();
+    forceRegenerate = body?.regenerate === true;
+  } catch {
+    // No body or invalid JSON, that's fine
+  }
+
   if (existingSpan) {
     span = existingSpan as SupplySpan;
+
+    if (forceRegenerate) {
+      // Delete old suggestions for this span
+      await supabase.from('suggestions').delete().eq('span_id', span.id);
+      // Delete the span itself to recreate
+      await supabase.from('supply_spans').delete().eq('id', span.id);
+      // Create new span
+      const { data: newSpan } = await supabase
+        .from('supply_spans')
+        .insert({
+          establishment_id: auth.establishment.id,
+          supplier_id: supplier.id,
+          start_date: currentSpanDef.start_date,
+          end_date: currentSpanDef.end_date,
+          day_count: currentSpanDef.day_count,
+        })
+        .select()
+        .single();
+      if (!newSpan) {
+        return NextResponse.json({ error: 'Failed to recreate span' }, { status: 500 });
+      }
+      span = newSpan as SupplySpan;
+      return await generateAndStore(supabase, auth, span);
+    }
+
     // Check if suggestions already exist for this span
     const { data: existingSuggestions } = await supabase
       .from('suggestions')

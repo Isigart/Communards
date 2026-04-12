@@ -123,8 +123,11 @@ export default function PlanningPage() {
 
   const allDates: string[] = [];
   if (span) {
+    // 2 jours avant le span + span complet + 1 jour apres
     const start = new Date(span.start_date + 'T00:00:00');
+    start.setDate(start.getDate() - 2);
     const end = new Date(span.end_date + 'T00:00:00');
+    end.setDate(end.getDate() + 1);
     for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
       allDates.push(d.toISOString().split('T')[0]);
     }
@@ -146,8 +149,8 @@ export default function PlanningPage() {
     return { day: day.charAt(0).toUpperCase() + day.slice(1), num: d.getDate() };
   };
 
-  // ~3 jours visibles sur mobile (ecran 375px - 48px labels = 327px / 3 ≈ 109px)
-  const COL_WIDTH = 109;
+  // Colonnes plus larges, le swipe gere le depassement
+  const COL_WIDTH = 130;
 
   // Rendu d'une cellule repas (compact)
   const MealCell = ({ meal, isPast }: { meal: Suggestion | undefined; isPast: boolean }) => {
@@ -220,6 +223,7 @@ export default function PlanningPage() {
             {allDates.map((date) => {
               const isPast = date < today;
               const isToday = date === today;
+              const isOutsideSpan = span ? (date < span.start_date || date > span.end_date) : false;
               const { day, num } = formatDay(date);
               const lunch = getMeal(date, 'lunch');
               const dinner = getMeal(date, 'dinner');
@@ -230,7 +234,7 @@ export default function PlanningPage() {
                 <div
                   key={date}
                   data-today={isToday || undefined}
-                  className={`flex-shrink-0 border-r border-gray-100 ${isPast ? 'opacity-40' : ''}`}
+                  className={`flex-shrink-0 border-r border-gray-100 ${isOutsideSpan ? 'opacity-25 bg-gray-50' : isPast ? 'opacity-40' : ''}`}
                   style={{ width: COL_WIDTH, scrollSnapAlign: 'start' }}
                 >
                   {/* Header jour */}

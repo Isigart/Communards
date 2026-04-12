@@ -17,6 +17,7 @@ export default function PlanningPage() {
   const [span, setSpan] = useState<SupplySpan | null>(null);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [prepTasks, setPrepTasks] = useState<PrepTask[]>([]);
+  const [deliveryDays, setDeliveryDays] = useState<number[]>([]);
   const [loading, setLoading] = useState(true);
   const [token, setToken] = useState<string | null>(null);
 
@@ -46,9 +47,10 @@ export default function PlanningPage() {
     const t = await getToken();
     if (!t) return;
     setToken(t);
-    const [sugRes, prepRes] = await Promise.all([
+    const [sugRes, prepRes, supRes] = await Promise.all([
       fetch('/api/suggestions', { headers: { Authorization: `Bearer ${t}` } }),
       fetch('/api/prep-tasks', { headers: { Authorization: `Bearer ${t}` } }),
+      fetch('/api/suppliers', { headers: { Authorization: `Bearer ${t}` } }),
     ]);
     if (sugRes.ok) {
       const data = await sugRes.json();
@@ -56,6 +58,11 @@ export default function PlanningPage() {
       setSuggestions(data.suggestions || []);
     }
     if (prepRes.ok) setPrepTasks(await prepRes.json());
+    if (supRes.ok) {
+      const suppliers = await supRes.json();
+      const primary = suppliers.find((s: { is_primary: boolean }) => s.is_primary);
+      if (primary) setDeliveryDays(primary.delivery_days || []);
+    }
     setLoading(false);
   }
 
@@ -125,6 +132,10 @@ export default function PlanningPage() {
 
   const getMeal = (date: string, type: string) =>
     suggestions.find((s) => s.meal_date === date && s.meal_type === type);
+  const isDeliveryDay = (date: string) => {
+    const d = new Date(date + 'T00:00:00').getDay();
+    return deliveryDays.includes(d);
+  };
   const getPreps = (date: string, slot: string) =>
     prepTasks.filter((t) => t.scheduled_day === date && t.scheduled_slot === slot);
   const unassigned = prepTasks.filter((t) => !t.scheduled_day);
@@ -223,9 +234,14 @@ export default function PlanningPage() {
                   style={{ width: COL_WIDTH, scrollSnapAlign: 'start' }}
                 >
                   {/* Header jour */}
-                  <div className={`h-14 flex flex-col items-center justify-end pb-1 border-b ${
+                  <div className={`flex flex-col items-center justify-end pb-1 border-b ${
                     isToday ? 'bg-brand-50 border-brand-200' : 'border-gray-200'
                   }`}>
+                    {isDeliveryDay(date) && (
+                      <span className="text-[9px] font-bold uppercase bg-blue-500 text-white px-1.5 py-0.5 rounded-full mb-0.5">
+                        Commande
+                      </span>
+                    )}
                     <span className={`text-[10px] uppercase ${isToday ? 'text-brand-600 font-bold' : 'text-gray-400'}`}>
                       {isToday ? 'Auj.' : day}
                     </span>

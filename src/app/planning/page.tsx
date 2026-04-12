@@ -152,19 +152,12 @@ export default function PlanningPage() {
   // Colonnes plus larges, le swipe gere le depassement
   const COL_WIDTH = 130;
 
-  // Rendu d'une cellule repas (compact)
-  const MealCell = ({ meal, isPast }: { meal: Suggestion | undefined; isPast: boolean }) => {
+  // Rendu d'une cellule repas
+  const renderMealCell = (meal: Suggestion | undefined, isPast: boolean) => {
     if (!meal) return null;
+    const isEditing = editingNote === meal.id;
     return (
-      <div
-        className="bg-white rounded-lg border border-gray-100 p-1.5 mb-1 cursor-pointer hover:border-brand-200 transition-colors"
-        onClick={() => {
-          if (!isPast && editingNote !== meal.id) {
-            setEditingNote(meal.id);
-            setDraftNote(meal.notes || '');
-          }
-        }}
-      >
+      <div className="bg-white rounded-lg border border-gray-100 p-1.5 mb-1">
         <span className="text-[10px] font-semibold uppercase text-brand-400">
           {meal.meal_type === 'lunch' ? 'dej' : 'din'}
         </span>
@@ -174,20 +167,34 @@ export default function PlanningPage() {
         {meal.ingredients.length > 3 && (
           <p className="text-[10px] text-gray-400">+{meal.ingredients.length - 3}</p>
         )}
-        {meal.notes && editingNote !== meal.id && (
-          <p className="text-[10px] text-amber-700 bg-amber-50 rounded px-1 mt-1 truncate">{meal.notes}</p>
+        {meal.notes && !isEditing && (
+          <p
+            className="text-[10px] text-amber-700 bg-amber-50 rounded px-1 mt-1 truncate cursor-pointer"
+            onClick={() => { setEditingNote(meal.id); setDraftNote(meal.notes || ''); }}
+          >
+            {meal.notes}
+          </p>
         )}
-        {editingNote === meal.id && (
-          <div className="mt-1" onClick={(e) => e.stopPropagation()}>
+        {isEditing && (
+          <div className="mt-1">
             <input
               className="w-full border border-brand-300 rounded text-[11px] px-1 py-0.5"
               placeholder="Note du chef..."
               value={draftNote}
               onChange={(e) => setDraftNote(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') saveNote(meal.id); if (e.key === 'Escape') setEditingNote(null); }}
+              onClick={(e) => e.stopPropagation()}
               autoFocus
             />
           </div>
+        )}
+        {!meal.notes && !isEditing && !isPast && (
+          <button
+            className="text-[10px] text-gray-300 mt-1"
+            onClick={() => { setEditingNote(meal.id); setDraftNote(''); }}
+          >
+            + note
+          </button>
         )}
       </div>
     );
@@ -261,7 +268,7 @@ export default function PlanningPage() {
                     onDrop={() => { if (dragging) { moveTask(dragging, date, 'matin'); setDragging(null); } }}
                   >
                     {/* Repas du midi */}
-                    <MealCell meal={lunch} isPast={isPast} />
+                    {renderMealCell(lunch, isPast)}
                     {/* Preps du matin */}
                     {prepsMatin.map((task) => (
                       <div
@@ -285,7 +292,7 @@ export default function PlanningPage() {
                     onDrop={() => { if (dragging) { moveTask(dragging, date, 'soir'); setDragging(null); } }}
                   >
                     {/* Repas du soir */}
-                    <MealCell meal={dinner} isPast={isPast} />
+                    {renderMealCell(dinner, isPast)}
                     {/* Preps du soir */}
                     {prepsSoir.map((task) => (
                       <div

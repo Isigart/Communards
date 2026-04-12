@@ -104,7 +104,7 @@ Regles: varier les proteines (pas la meme 2 jours de suite), alterner les couts.
       ingredients,
       estimated_cost: Math.round((template.estimated_cost_per_person as number) * nbPersons * 100) / 100,
       grocery_list: [],
-      notes: (template.prep_notes as string) || null,
+      notes: null,
     };
   }).filter(Boolean) as Omit<Suggestion, 'id' | 'span_id' | 'establishment_id' | 'created_at'>[];
 }

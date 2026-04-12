@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
-import type { Establishment, Suggestion, Feedback, SupplySpan, Ingredient } from './types';
-import { MARKET_CONFIG } from './types';
+import type { Establishment, Suggestion, Feedback, SupplySpan } from './types';
+import { createServerClient } from './supabase';
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
 
@@ -10,27 +10,59 @@ interface GenerateInput {
   pastFeedback: Feedback[];
 }
 
+function getCurrentSeason(): string {
+  const month = new Date().getMonth() + 1;
+  if (month >= 3 && month <= 5) return 'printemps';
+  if (month >= 6 && month <= 8) return 'ete';
+  if (month >= 9 && month <= 11) return 'automne';
+  return 'hiver';
+}
+
 export async function generateSuggestions(input: GenerateInput): Promise<Omit<Suggestion, 'id' | 'span_id' | 'establishment_id' | 'created_at'>[]> {
   const { establishment, span, pastFeedback } = input;
-  const config = MARKET_CONFIG[establishment.market];
+  const nbPersons = establishment.employee_count;
+  const season = getCurrentSeason();
+
+  // Charger les templates de la saison
+  const supabase = createServerClient();
+  const { data: templates } = await supabase
+    .from('meal_templates')
+    .select('*')
+    .contains('season', [season]);
+
+  // Si pas de templates, fallback sur tous
+  const pool = templates && templates.length > 0
+    ? templates
+    : (await supabase.from('meal_templates').select('*')).data || [];
+
+  if (pool.length === 0) {
+    throw new Error('No meal templates available');
+  }
+
+  // Construire la liste compacte des repas disponibles
+  const templateList = pool.map((t: Record<string, unknown>, i: number) =>
+    `${i}|${t.name}|${t.meal_type}|${t.protein_type}|${(t.estimated_cost_per_person as number)?.toFixed(2)}€`
+  ).join('\n');
 
   const feedbackContext = pastFeedback.length > 0
-    ? `\nHistorique feedback recent:\n${pastFeedback.map(f =>
-        `- ${f.status}${f.notes ? `: ${f.notes}` : ''}`
-      ).join('\n')}`
+    ? `\nRepas recents (eviter de repeter): ${pastFeedback.slice(0, 10).map(f =>
+        `${f.status}${f.notes ? `: ${f.notes}` : ''}`
+      ).join(', ')}`
     : '';
 
-  const prompt = `Repas du personnel — ${establishment.employee_count} personnes, ${establishment.budget_per_meal} ${config.currency}/repas max.
-Du ${span.start_date} au ${span.end_date} (${span.day_count} jours).
+  const prompt = `Choisis des repas pour ${span.day_count} jours (${span.start_date} au ${span.end_date}), dejeuner + diner chaque jour.
+${nbPersons} personnes, max ${establishment.budget_per_meal}€/pers/repas.
 ${feedbackContext}
-Pour chaque jour: dejeuner + diner. Ingredients + quantites pour ${establishment.employee_count} pers.
-Regles: produits stables uniquement (pas de frais fragiles). Surgeles et conserves acceptes. Produits classes collectivite acceptes. Pas de condiments (sel, poivre, huile, vinaigre, epices de base sont deja en cuisine). Varier proteines/feculents/legumes. Saison.
-Reponds UNIQUEMENT en JSON compact, pas de texte avant/apres:
-[{"day_index":0,"meal_date":"YYYY-MM-DD","meal_type":"lunch","ingredients":[{"name":"...","quantity":"2","unit":"kg","category":"proteine"}],"estimated_cost":3.2,"grocery_list":[],"notes":null}]`;
+
+Repas disponibles (index|nom|type|proteine|cout):
+${templateList}
+
+Regles: varier les proteines (pas la meme 2 jours de suite), alterner les couts. Reponds UNIQUEMENT avec les index choisis en JSON:
+[{"day_index":0,"meal_date":"${span.start_date}","meal_type":"lunch","template_index":5},{"day_index":0,"meal_date":"${span.start_date}","meal_type":"dinner","template_index":12}]`;
 
   const message = await client.messages.create({
     model: 'claude-haiku-4-5-20251001',
-    max_tokens: 4096,
+    max_tokens: 1024,
     messages: [{ role: 'user', content: prompt }],
   });
 
@@ -40,17 +72,39 @@ Reponds UNIQUEMENT en JSON compact, pas de texte avant/apres:
     throw new Error('Failed to parse suggestions from Claude response');
   }
 
-  // Tenter de reparer un JSON tronque
-  let jsonStr = jsonMatch[0];
+  let selections: { day_index: number; meal_date: string; meal_type: string; template_index: number }[];
   try {
-    return JSON.parse(jsonStr);
+    selections = JSON.parse(jsonMatch[0]);
   } catch {
-    // Tronquer au dernier objet complet
-    const lastComplete = jsonStr.lastIndexOf('},');
+    const lastComplete = jsonMatch[0].lastIndexOf('},');
     if (lastComplete > 0) {
-      jsonStr = jsonStr.substring(0, lastComplete + 1) + ']';
-      return JSON.parse(jsonStr);
+      selections = JSON.parse(jsonMatch[0].substring(0, lastComplete + 1) + ']');
+    } else {
+      throw new Error('Failed to parse selections JSON');
     }
-    throw new Error('Failed to parse suggestions JSON');
   }
+
+  // Transformer les selections en suggestions completes
+  return selections.map((sel) => {
+    const template = pool[sel.template_index];
+    if (!template) return null;
+
+    // Multiplier les quantites par le nombre de personnes
+    const ingredients = ((template.ingredients as Record<string, string>[]) || []).map((ing) => ({
+      name: ing.name,
+      quantity: (parseFloat(ing.quantity) * nbPersons).toFixed(1),
+      unit: ing.unit,
+      category: ing.category,
+    }));
+
+    return {
+      day_index: sel.day_index,
+      meal_date: sel.meal_date,
+      meal_type: sel.meal_type as 'lunch' | 'dinner',
+      ingredients,
+      estimated_cost: Math.round((template.estimated_cost_per_person as number) * nbPersons * 100) / 100,
+      grocery_list: [],
+      notes: (template.prep_notes as string) || null,
+    };
+  }).filter(Boolean) as Omit<Suggestion, 'id' | 'span_id' | 'establishment_id' | 'created_at'>[];
 }

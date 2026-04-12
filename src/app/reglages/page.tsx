@@ -28,6 +28,7 @@ export default function ReglagesPage() {
   const [service, setService] = useState<ServiceType>('lunch');
   const [employeeCount, setEmployeeCount] = useState(12);
   const [deliveryDays, setDeliveryDays] = useState<number[]>([]);
+  const [supplierId, setSupplierId] = useState<string | null>(null);
   const [constraints, setConstraints] = useState<string[]>([]);
   const [constraintOther, setConstraintOther] = useState('');
 
@@ -71,6 +72,7 @@ export default function ReglagesPage() {
       const primary = suppliers.find((s: { is_primary: boolean }) => s.is_primary);
       if (primary) {
         setDeliveryDays(primary.delivery_days || []);
+        setSupplierId(primary.id);
       }
     }
 
@@ -118,16 +120,19 @@ export default function ReglagesPage() {
     });
 
     // Update supplier delivery days
-    await fetch('/api/suppliers', {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({
-        delivery_days: deliveryDays,
-      }),
-    });
+    if (supplierId) {
+      await fetch('/api/suppliers', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          id: supplierId,
+          delivery_days: deliveryDays,
+        }),
+      });
+    }
 
     // Regenerer : etape 1 creer le span
     const spanRes = await fetch('/api/suggestions', {

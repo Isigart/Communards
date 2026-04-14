@@ -207,7 +207,7 @@ export default function PlanningPage() {
       <div className="relative">
         {/* Labels fixes */}
         <div className="absolute left-0 top-0 z-10 bg-papier w-12">
-          <div className="h-16 border-b border-bordure"></div>
+          <div className="h-20 border-b border-bordure"></div>
           <div className="h-44 flex items-center justify-center border-b border-bordure">
             <span className="text-xs font-medium text-muted -rotate-90 whitespace-nowrap">Matin</span>
           </div>
@@ -241,7 +241,7 @@ export default function PlanningPage() {
                   style={{ width: COL_WIDTH, scrollSnapAlign: 'start' }}
                 >
                   {/* Header jour */}
-                  <div className={`h-16 flex flex-col items-center justify-end pb-1 border-b ${
+                  <div className={`h-20 flex flex-col items-center justify-end pb-1.5 border-b ${
                     isToday ? 'bg-noir/5 border-noir/20' : 'border-bordure'
                   }`}>
                     {isDeliveryDay(date) && (

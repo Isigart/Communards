@@ -7,18 +7,16 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        brand: {
-          50: '#fef9ec',
-          100: '#fbf0ca',
-          200: '#f7de91',
-          300: '#f3c64d',
-          400: '#f0b326',
-          500: '#e99a0d',
-          600: '#ce7508',
-          700: '#ab530b',
-          800: '#8b4110',
-          900: '#733610',
-        },
+        papier: '#F5F0E8',
+        rouge: '#C8402A',
+        noir: '#1A1916',
+        surface: '#FDFCF9',
+        bordure: '#D6CFC3',
+        muted: '#B5AFA5',
+      },
+      fontFamily: {
+        titre: ['Georgia', 'Times New Roman', 'serif'],
+        data: ['SF Mono', 'Fira Code', 'Fira Mono', 'Roboto Mono', 'monospace'],
       },
     },
   },

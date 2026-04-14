@@ -3,8 +3,8 @@ import './globals.css';
 import NavHeader from './NavHeader';
 
 export const metadata: Metadata = {
-  title: 'La Table de l\'Equipe',
-  description: 'Le repas du personnel, organise.',
+  title: 'L\'Ordinaire',
+  description: 'Le repas du personnel, on s\'en occupe.',
   manifest: '/manifest.json',
 };
 
@@ -12,13 +12,13 @@ export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   maximumScale: 1,
-  themeColor: '#e99a0d',
+  themeColor: '#C8402A',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="fr">
-      <body className="min-h-screen pt-0">
+      <body className="min-h-screen">
         <NavHeader />
         {children}
       </body>

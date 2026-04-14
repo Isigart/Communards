@@ -22,7 +22,6 @@ export default function OnboardingPage() {
   const [loading, setLoading] = useState(false);
   const [token, setToken] = useState<string | null>(null);
 
-  // Form state
   const [name, setName] = useState('');
   const [service, setService] = useState<ServiceType | ''>('');
   const [countLunch, setCountLunch] = useState(12);
@@ -34,10 +33,7 @@ export default function OnboardingPage() {
   useEffect(() => {
     const supabase = createBrowserClient();
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!session) {
-        window.location.href = '/';
-        return;
-      }
+      if (!session) { window.location.href = '/'; return; }
       setToken(session.access_token);
     });
   }, []);
@@ -49,10 +45,7 @@ export default function OnboardingPage() {
   };
 
   const toggleConstraint = (value: string) => {
-    if (value === 'aucune') {
-      setConstraints(['aucune']);
-      return;
-    }
+    if (value === 'aucune') { setConstraints(['aucune']); return; }
     setConstraints((prev) => {
       const without = prev.filter((c) => c !== 'aucune');
       return without.includes(value) ? without.filter((c) => c !== value) : [...without, value];
@@ -81,10 +74,7 @@ export default function OnboardingPage() {
 
     const res = await fetch('/api/establishment', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify({
         name: name.trim(),
         employee_count: employeeCount,
@@ -98,7 +88,6 @@ export default function OnboardingPage() {
     });
 
     if (res.ok) {
-      // Etape 1 : creer le span
       const spanRes = await fetch('/api/suggestions', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
@@ -106,13 +95,9 @@ export default function OnboardingPage() {
       if (spanRes.ok) {
         const spanData = await spanRes.json();
         if (spanData.status === 'pending' && spanData.span) {
-          // Etape 2 : generer via Claude
           await fetch('/api/suggestions/generate', {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${token}`,
-            },
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
             body: JSON.stringify({ span_id: spanData.span.id }),
           });
         }
@@ -124,61 +109,42 @@ export default function OnboardingPage() {
 
   const progress = ((step + 1) / 5) * 100;
 
-  // Budget preview
   const budgetPreview = () => {
-    if (service === 'both') {
-      return (countLunch + countDinner) * BUDGET_HCR * 5;
-    }
+    if (service === 'both') return (countLunch + countDinner) * BUDGET_HCR * 5;
     return countLunch * BUDGET_HCR * 5;
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-32">
+    <div className="min-h-screen pb-32">
       <div className="max-w-md mx-auto px-4 pt-8">
         {/* Progress */}
         <div className="mb-2 flex justify-between items-center">
-          <span className="text-xs text-gray-400">Etape {step + 1} / 5</span>
-          <span className="text-xs text-brand-500 font-medium">La Table de l&apos;Equipe</span>
+          <span className="text-xs text-muted">Etape {step + 1} / 5</span>
+          <span className="font-titre text-sm text-noir">L&apos;Ordinaire</span>
         </div>
-        <div className="h-1.5 bg-gray-200 rounded-full mb-8">
-          <div
-            className="h-full bg-brand-500 rounded-full transition-all duration-300"
-            style={{ width: `${progress}%` }}
-          />
+        <div className="h-1 bg-bordure rounded-full mb-8">
+          <div className="h-full bg-noir rounded-full transition-all duration-300" style={{ width: `${progress}%` }} />
         </div>
 
         {/* Step 0: Nom */}
         {step === 0 && (
           <div className="space-y-4">
-            <h2 className="text-xl font-bold text-gray-800">Comment s&apos;appelle votre etablissement ?</h2>
-            <input
-              type="text"
-              className="input text-lg"
-              placeholder="Le Bistrot du Marche"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              autoFocus
-            />
+            <h2 className="font-titre text-xl text-noir">Comment s&apos;appelle la maison ?</h2>
+            <input type="text" className="input text-lg" placeholder="Le Bistrot du Marche" value={name} onChange={(e) => setName(e.target.value)} autoFocus />
           </div>
         )}
 
         {/* Step 1: Services */}
         {step === 1 && (
           <div className="space-y-4">
-            <h2 className="text-xl font-bold text-gray-800">Quels services nourrissez-vous ?</h2>
+            <h2 className="font-titre text-xl text-noir">Quels services a nourrir ?</h2>
             <div className="space-y-3">
-              {([
-                ['lunch', 'Dejeuner uniquement'],
-                ['dinner', 'Diner uniquement'],
-                ['both', 'Les deux'],
-              ] as [ServiceType, string][]).map(([value, label]) => (
+              {([['lunch', 'Dejeuner uniquement'], ['dinner', 'Diner uniquement'], ['both', 'Les deux']] as [ServiceType, string][]).map(([value, label]) => (
                 <button
                   key={value}
                   onClick={() => setService(value)}
-                  className={`w-full p-4 rounded-xl border-2 text-left font-medium transition-colors ${
-                    service === value
-                      ? 'border-brand-500 bg-brand-50 text-brand-700'
-                      : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'
+                  className={`w-full p-4 rounded-xl border text-left font-medium transition-colors ${
+                    service === value ? 'border-noir bg-noir/5 text-noir' : 'border-bordure bg-surface text-muted'
                   }`}
                 >
                   {label}
@@ -191,48 +157,24 @@ export default function OnboardingPage() {
         {/* Step 2: Nombre de personnes */}
         {step === 2 && (
           <div className="space-y-4">
-            <h2 className="text-xl font-bold text-gray-800">Combien de personnes par service ?</h2>
+            <h2 className="font-titre text-xl text-noir">Combien a table ?</h2>
             {service === 'both' ? (
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-600 mb-2">Midi</label>
-                  <input
-                    type="number"
-                    className="input text-lg text-center"
-                    value={countLunch}
-                    onChange={(e) => setCountLunch(Math.max(1, parseInt(e.target.value) || 1))}
-                    min={1}
-                    autoFocus
-                  />
+                  <label className="block text-sm text-muted mb-2">Midi</label>
+                  <input type="number" className="input text-lg text-center font-data" value={countLunch} onChange={(e) => setCountLunch(Math.max(1, parseInt(e.target.value) || 1))} min={1} autoFocus />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-600 mb-2">Soir</label>
-                  <input
-                    type="number"
-                    className="input text-lg text-center"
-                    value={countDinner}
-                    onChange={(e) => setCountDinner(Math.max(1, parseInt(e.target.value) || 1))}
-                    min={1}
-                  />
+                  <label className="block text-sm text-muted mb-2">Soir</label>
+                  <input type="number" className="input text-lg text-center font-data" value={countDinner} onChange={(e) => setCountDinner(Math.max(1, parseInt(e.target.value) || 1))} min={1} />
                 </div>
               </div>
             ) : (
-              <input
-                type="number"
-                className="input text-lg text-center"
-                value={countLunch}
-                onChange={(e) => setCountLunch(Math.max(1, parseInt(e.target.value) || 1))}
-                min={1}
-                autoFocus
-              />
+              <input type="number" className="input text-lg text-center font-data" value={countLunch} onChange={(e) => setCountLunch(Math.max(1, parseInt(e.target.value) || 1))} min={1} autoFocus />
             )}
-            <div className="card bg-brand-50 border-brand-200">
-              <p className="text-sm text-brand-700">
-                Budget legal HCR : {BUDGET_HCR} EUR/repas/pers
-              </p>
-              <p className="text-lg font-bold text-brand-600 mt-1">
-                {budgetPreview().toFixed(0)} EUR / semaine
-              </p>
+            <div className="card">
+              <p className="text-sm text-muted">Budget legal HCR : <span className="font-data">{BUDGET_HCR} EUR</span>/repas/pers</p>
+              <p className="text-lg font-data text-noir mt-1">{budgetPreview().toFixed(0)} EUR / semaine</p>
             </div>
           </div>
         )}
@@ -240,8 +182,8 @@ export default function OnboardingPage() {
         {/* Step 3: Jours de commande */}
         {step === 3 && (
           <div className="space-y-4">
-            <h2 className="text-xl font-bold text-gray-800">Quels jours passez-vous commande ?</h2>
-            <p className="text-sm text-gray-500">On organise les repas entre chaque commande. Par exemple, commande mardi et vendredi → les suggestions couvrent mar-jeu puis ven-lun.</p>
+            <h2 className="font-titre text-xl text-noir">Quels jours passez-vous commande ?</h2>
+            <p className="text-sm text-muted">On organise les repas entre chaque commande.</p>
             <div className="grid grid-cols-4 gap-2">
               {DAY_LABELS.map((label, i) => {
                 const dayVal = DAY_VALUES[i];
@@ -250,10 +192,8 @@ export default function OnboardingPage() {
                   <button
                     key={dayVal}
                     onClick={() => toggleOrderDay(dayVal)}
-                    className={`py-3 rounded-xl border-2 font-medium text-sm transition-colors ${
-                      selected
-                        ? 'border-brand-500 bg-brand-500 text-white'
-                        : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
+                    className={`py-3 rounded-lg border font-medium text-sm transition-colors ${
+                      selected ? 'border-noir bg-noir text-papier' : 'border-bordure bg-surface text-muted'
                     }`}
                   >
                     {label}
@@ -262,9 +202,7 @@ export default function OnboardingPage() {
               })}
             </div>
             {orderDays.length > 0 && (
-              <p className="text-sm text-gray-500">
-                {computeSpanDefinitions(orderDays).length} periode(s) entre commandes par semaine
-              </p>
+              <p className="text-sm text-muted font-data">{computeSpanDefinitions(orderDays).length} periode(s) entre commandes</p>
             )}
           </div>
         )}
@@ -272,7 +210,7 @@ export default function OnboardingPage() {
         {/* Step 4: Contraintes alimentaires */}
         {step === 4 && (
           <div className="space-y-4">
-            <h2 className="text-xl font-bold text-gray-800">Contraintes alimentaires ?</h2>
+            <h2 className="font-titre text-xl text-noir">Des contraintes a table ?</h2>
             <div className="grid grid-cols-2 gap-2">
               {CONSTRAINTS_OPTIONS.map((opt) => {
                 const selected = constraints.includes(opt.value);
@@ -280,10 +218,8 @@ export default function OnboardingPage() {
                   <button
                     key={opt.value}
                     onClick={() => toggleConstraint(opt.value)}
-                    className={`py-3 px-4 rounded-xl border-2 font-medium text-sm transition-colors ${
-                      selected
-                        ? 'border-brand-500 bg-brand-50 text-brand-700'
-                        : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
+                    className={`py-3 px-4 rounded-lg border font-medium text-sm transition-colors ${
+                      selected ? 'border-noir bg-noir/5 text-noir' : 'border-bordure bg-surface text-muted'
                     }`}
                   >
                     {opt.label}
@@ -291,38 +227,26 @@ export default function OnboardingPage() {
                 );
               })}
             </div>
-            <input
-              type="text"
-              className="input"
-              placeholder="Autre contrainte..."
-              value={constraintOther}
-              onChange={(e) => setConstraintOther(e.target.value)}
-            />
+            <input type="text" className="input" placeholder="Autre contrainte..." value={constraintOther} onChange={(e) => setConstraintOther(e.target.value)} />
           </div>
         )}
       </div>
 
       {/* Navigation fixe */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4">
+      <div className="fixed bottom-0 left-0 right-0 bg-papier border-t border-bordure p-4">
         <div className="max-w-md mx-auto flex gap-3">
           {step > 0 && (
-            <button onClick={() => setStep(step - 1)} className="btn-secondary px-6">
-              ←
-            </button>
+            <button onClick={() => setStep(step - 1)} className="btn-secondary px-6">←</button>
           )}
           <button
-            onClick={() => {
-              if (step < 4) setStep(step + 1);
-              else handleSubmit();
-            }}
+            onClick={() => { if (step < 4) setStep(step + 1); else handleSubmit(); }}
             disabled={!canAdvance() || loading}
-            className={`flex-1 py-3 rounded-lg font-semibold transition-colors ${
+            className={`flex-1 py-3 rounded-lg font-data text-sm tracking-wide transition-colors ${
               canAdvance() && !loading
-                ? 'bg-brand-500 hover:bg-brand-600 text-white'
-                : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                ? 'bg-noir text-papier' : 'bg-bordure text-muted cursor-not-allowed'
             }`}
           >
-            {loading ? 'Preparation de votre planning...' : step === 4 ? 'Voir mon planning' : 'Continuer'}
+            {loading ? 'on prepare le service...' : step === 4 ? 'voir mon planning →' : 'continuer →'}
           </button>
         </div>
       </div>

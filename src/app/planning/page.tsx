@@ -116,14 +116,13 @@ export default function PlanningPage() {
   }
 
   if (loading) {
-    return <div className="flex min-h-screen items-center justify-center"><p className="text-gray-500">Chargement...</p></div>;
+    return <div className="flex min-h-screen items-center justify-center"><p className="text-muted">On prepare le planning...</p></div>;
   }
 
   const today = new Date().toISOString().split('T')[0];
 
   const allDates: string[] = [];
   if (span) {
-    // 2 jours avant le span + span complet + 1 jour apres
     const start = new Date(span.start_date + 'T00:00:00');
     start.setDate(start.getDate() - 2);
     const end = new Date(span.end_date + 'T00:00:00');
@@ -149,27 +148,25 @@ export default function PlanningPage() {
     return { day: day.charAt(0).toUpperCase() + day.slice(1), num: d.getDate() };
   };
 
-  // Colonnes plus larges, le swipe gere le depassement
   const COL_WIDTH = 130;
 
-  // Rendu d'une cellule repas
   const renderMealCell = (meal: Suggestion | undefined, isPast: boolean) => {
     if (!meal) return null;
     const isEditing = editingNote === meal.id;
     return (
-      <div className="bg-white rounded-lg border border-gray-100 p-1.5 mb-1">
-        <span className="text-[10px] font-semibold uppercase text-brand-400">
+      <div className="bg-surface rounded-lg border border-bordure p-1.5 mb-1">
+        <span className="font-titre text-[10px] text-muted">
           {meal.meal_type === 'lunch' ? 'dej' : 'din'}
         </span>
         {meal.ingredients.slice(0, 3).map((ing, i) => (
-          <p key={i} className="text-[11px] text-gray-700 truncate leading-tight">{ing.name}</p>
+          <p key={i} className="text-[11px] text-noir truncate leading-tight">{ing.name}</p>
         ))}
         {meal.ingredients.length > 3 && (
-          <p className="text-[10px] text-gray-400">+{meal.ingredients.length - 3}</p>
+          <p className="text-[10px] text-muted">+{meal.ingredients.length - 3}</p>
         )}
         {meal.notes && !isEditing && (
           <p
-            className="text-[10px] text-amber-700 bg-amber-50 rounded px-1 mt-1 truncate cursor-pointer"
+            className="text-[10px] text-noir/60 italic mt-1 truncate cursor-pointer"
             onClick={() => { setEditingNote(meal.id); setDraftNote(meal.notes || ''); }}
           >
             {meal.notes}
@@ -178,7 +175,7 @@ export default function PlanningPage() {
         {isEditing && (
           <div className="mt-1">
             <input
-              className="w-full border border-brand-300 rounded text-[11px] px-1 py-0.5"
+              className="w-full border border-noir/30 rounded text-[11px] px-1 py-0.5 bg-surface"
               placeholder="Note du chef..."
               value={draftNote}
               onChange={(e) => setDraftNote(e.target.value)}
@@ -190,7 +187,7 @@ export default function PlanningPage() {
         )}
         {!meal.notes && !isEditing && !isPast && (
           <button
-            className="text-[10px] text-gray-300 mt-1"
+            className="text-[10px] text-muted mt-1"
             onClick={() => { setEditingNote(meal.id); setDraftNote(''); }}
           >
             + note
@@ -203,20 +200,19 @@ export default function PlanningPage() {
   return (
     <div className="min-h-screen pb-32 p-4 max-w-lg mx-auto">
       <header className="flex items-center justify-between mb-3">
-        <h1 className="text-lg font-bold">Planning</h1>
-        <span className="text-xs text-gray-400">← Swipe →</span>
+        <h1 className="font-titre text-lg text-noir">Planning</h1>
+        <span className="text-xs text-muted">← Swipe →</span>
       </header>
 
-      {/* ===== TABLEAU ===== */}
       <div className="relative">
         {/* Labels fixes */}
-        <div className="absolute left-0 top-0 z-10 bg-gray-50 w-12">
-          <div className="h-14 border-b border-gray-200"></div>
-          <div className="h-48 flex items-center justify-center border-b border-gray-200">
-            <span className="text-xs font-bold text-gray-500 -rotate-90 whitespace-nowrap">Matin</span>
+        <div className="absolute left-0 top-0 z-10 bg-papier w-12">
+          <div className="h-14 border-b border-bordure"></div>
+          <div className="h-48 flex items-center justify-center border-b border-bordure">
+            <span className="text-xs font-medium text-muted -rotate-90 whitespace-nowrap">Matin</span>
           </div>
           <div className="h-48 flex items-center justify-center">
-            <span className="text-xs font-bold text-gray-500 -rotate-90 whitespace-nowrap">Soir</span>
+            <span className="text-xs font-medium text-muted -rotate-90 whitespace-nowrap">Soir</span>
           </div>
         </div>
 
@@ -241,68 +237,60 @@ export default function PlanningPage() {
                 <div
                   key={date}
                   data-today={isToday || undefined}
-                  className={`flex-shrink-0 border-r border-gray-100 ${isOutsideSpan ? 'opacity-25 bg-gray-50' : isPast ? 'opacity-40' : ''}`}
+                  className={`flex-shrink-0 border-r border-bordure ${isOutsideSpan ? 'opacity-25' : isPast ? 'opacity-40' : ''}`}
                   style={{ width: COL_WIDTH, scrollSnapAlign: 'start' }}
                 >
                   {/* Header jour */}
                   <div className={`flex flex-col items-center justify-end pb-1 border-b ${
-                    isToday ? 'bg-brand-50 border-brand-200' : 'border-gray-200'
+                    isToday ? 'bg-noir/5 border-noir/20' : 'border-bordure'
                   }`}>
                     {isDeliveryDay(date) && (
-                      <span className="text-[9px] font-bold uppercase bg-blue-500 text-white px-1.5 py-0.5 rounded-full mb-0.5">
+                      <span className="text-[9px] font-data uppercase bg-noir text-papier px-1.5 py-0.5 rounded-full mb-0.5">
                         Commande
                       </span>
                     )}
-                    <span className={`text-[10px] uppercase ${isToday ? 'text-brand-600 font-bold' : 'text-gray-400'}`}>
+                    <span className={`text-[10px] uppercase ${isToday ? 'text-noir font-bold' : 'text-muted'}`}>
                       {isToday ? 'Auj.' : day}
                     </span>
-                    <span className={`text-lg font-bold ${isToday ? 'text-brand-600' : 'text-gray-700'}`}>{num}</span>
+                    <span className={`text-lg font-titre ${isToday ? 'text-noir' : 'text-noir/70'}`}>{num}</span>
                   </div>
 
-                  {/* === MATIN === */}
+                  {/* MATIN */}
                   <div
-                    className={`h-48 p-1 border-b border-gray-200 overflow-y-auto ${
-                      dragging ? 'bg-violet-50/50' : ''
-                    }`}
+                    className={`h-48 p-1 border-b border-bordure overflow-y-auto ${dragging ? 'bg-noir/5' : ''}`}
                     onDragOver={(e) => e.preventDefault()}
                     onDrop={() => { if (dragging) { moveTask(dragging, date, 'matin'); setDragging(null); } }}
                   >
-                    {/* Repas du midi */}
                     {renderMealCell(lunch, isPast)}
-                    {/* Preps du matin */}
                     {prepsMatin.map((task) => (
                       <div
                         key={task.id}
                         draggable
                         onDragStart={() => setDragging(task.id)}
-                        className="bg-violet-100 text-violet-700 rounded px-1.5 py-0.5 text-[11px] font-medium mb-0.5 cursor-grab active:cursor-grabbing flex items-center justify-between"
+                        className="bg-noir/5 text-noir border border-bordure rounded px-1.5 py-0.5 text-[11px] font-data mb-0.5 cursor-grab active:cursor-grabbing flex items-center justify-between"
                       >
                         <span className="truncate">{task.label}</span>
-                        {!isPast && <button onClick={() => deleteTask(task.id)} className="text-violet-400 hover:text-red-500 ml-1 text-[10px] shrink-0">x</button>}
+                        {!isPast && <button onClick={() => deleteTask(task.id)} className="text-muted hover:text-rouge ml-1 text-[10px] shrink-0">x</button>}
                       </div>
                     ))}
                   </div>
 
-                  {/* === SOIR === */}
+                  {/* SOIR */}
                   <div
-                    className={`h-48 p-1 overflow-y-auto ${
-                      dragging ? 'bg-violet-50/50' : ''
-                    }`}
+                    className={`h-48 p-1 overflow-y-auto ${dragging ? 'bg-noir/5' : ''}`}
                     onDragOver={(e) => e.preventDefault()}
                     onDrop={() => { if (dragging) { moveTask(dragging, date, 'soir'); setDragging(null); } }}
                   >
-                    {/* Repas du soir */}
                     {renderMealCell(dinner, isPast)}
-                    {/* Preps du soir */}
                     {prepsSoir.map((task) => (
                       <div
                         key={task.id}
                         draggable
                         onDragStart={() => setDragging(task.id)}
-                        className="bg-violet-100 text-violet-700 rounded px-1.5 py-0.5 text-[11px] font-medium mb-0.5 cursor-grab active:cursor-grabbing flex items-center justify-between"
+                        className="bg-noir/5 text-noir border border-bordure rounded px-1.5 py-0.5 text-[11px] font-data mb-0.5 cursor-grab active:cursor-grabbing flex items-center justify-between"
                       >
                         <span className="truncate">{task.label}</span>
-                        {!isPast && <button onClick={() => deleteTask(task.id)} className="text-violet-400 hover:text-red-500 ml-1 text-[10px] shrink-0">x</button>}
+                        {!isPast && <button onClick={() => deleteTask(task.id)} className="text-muted hover:text-rouge ml-1 text-[10px] shrink-0">x</button>}
                       </div>
                     ))}
                   </div>
@@ -313,27 +301,27 @@ export default function PlanningPage() {
         </div>
       </div>
 
-      {/* ===== PREPS NON PLACEES + AJOUT ===== */}
+      {/* PREPS NON PLACEES + AJOUT */}
       <div className="space-y-3 mt-4">
         {unassigned.length > 0 && (
           <div
             className={`p-3 rounded-lg border-2 border-dashed transition-colors ${
-              dragging ? 'border-red-300 bg-red-50' : 'border-violet-200 bg-violet-50'
+              dragging ? 'border-rouge/30 bg-rouge/5' : 'border-bordure'
             }`}
             onDragOver={(e) => e.preventDefault()}
             onDrop={() => { if (dragging) { moveTask(dragging, null, null); setDragging(null); } }}
           >
-            <p className="text-xs font-medium text-violet-500 mb-2">A placer — glisser vers un creneau</p>
+            <p className="text-xs text-muted mb-2">A placer — glisser vers un creneau</p>
             <div className="flex flex-wrap gap-2">
               {unassigned.map((task) => (
                 <div
                   key={task.id}
                   draggable
                   onDragStart={() => setDragging(task.id)}
-                  className="bg-violet-100 text-violet-700 border border-violet-200 rounded-lg px-3 py-1.5 text-xs font-medium cursor-grab active:cursor-grabbing shadow-sm inline-flex items-center"
+                  className="bg-noir/5 text-noir border border-bordure rounded-lg px-3 py-1.5 text-xs font-data cursor-grab active:cursor-grabbing inline-flex items-center"
                 >
                   {task.label}
-                  <button onClick={() => deleteTask(task.id)} className="ml-2 text-violet-400 hover:text-red-500">x</button>
+                  <button onClick={() => deleteTask(task.id)} className="ml-2 text-muted hover:text-rouge">x</button>
                 </div>
               ))}
             </div>
@@ -350,10 +338,10 @@ export default function PlanningPage() {
           />
           <button
             onClick={addPrepTask}
-            className="bg-violet-500 hover:bg-violet-600 text-white text-sm font-semibold px-4 rounded-lg"
+            className="btn-secondary text-sm px-4 font-data"
             disabled={!newTaskLabel.trim()}
           >
-            + Prep
+            + prep
           </button>
         </div>
       </div>

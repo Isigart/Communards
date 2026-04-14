@@ -1,11 +1,11 @@
 {
-  "name": "La Table de l'Equipe",
-  "short_name": "La Table",
-  "description": "Le repas du personnel, organise.",
+  "name": "L'Ordinaire",
+  "short_name": "L'Ordinaire",
+  "description": "Le repas du personnel, on s'en occupe.",
   "start_url": "/dashboard",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#e99a0d",
+  "background_color": "#F5F0E8",
+  "theme_color": "#C8402A",
   "icons": [
     {
       "src": "/icon-192.png",

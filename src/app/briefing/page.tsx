@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { createBrowserClient } from '@/lib/supabase';
 import type { Suggestion, SupplySpan } from '@/lib/types';
+import { getToken, fetchSuggestions } from '@/lib/cache';
 
 export default function BriefingPage() {
   const [span, setSpan] = useState<SupplySpan | null>(null);
@@ -13,22 +13,10 @@ export default function BriefingPage() {
 
   useEffect(() => { loadData(); }, []);
 
-  async function getToken() {
-    const supabase = createBrowserClient();
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) { window.location.href = '/'; return null; }
-    return session.access_token;
-  }
-
   async function loadData() {
-    const token = await getToken();
-    if (!token) return;
-    const res = await fetch('/api/suggestions', { headers: { Authorization: `Bearer ${token}` } });
-    if (res.ok) {
-      const data = await res.json();
-      setSpan(data.span);
-      setSuggestions(data.suggestions || []);
-    }
+    const { span: s, suggestions: sugs } = await fetchSuggestions();
+    setSpan(s);
+    setSuggestions(sugs);
     setLoading(false);
   }
 

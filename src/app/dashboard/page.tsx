@@ -1,9 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { createBrowserClient } from '@/lib/supabase';
 import type { Establishment, Suggestion, SupplySpan } from '@/lib/types';
 import { BUDGET_HCR } from '@/lib/types';
+import { getToken, fetchEstablishment, fetchSuggestions, invalidateSuggestions } from '@/lib/cache';
 
 export default function DashboardPage() {
   const [establishment, setEstablishment] = useState<Establishment | null>(null);
@@ -14,27 +14,13 @@ export default function DashboardPage() {
 
   useEffect(() => { loadDashboard(); }, []);
 
-  async function getToken() {
-    const supabase = createBrowserClient();
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) { window.location.href = '/'; return null; }
-    return session.access_token;
-  }
-
   async function loadDashboard() {
-    const token = await getToken();
-    if (!token) return;
+    const est = await fetchEstablishment();
+    if (est) setEstablishment(est);
 
-    const estRes = await fetch('/api/establishment', { headers: { Authorization: `Bearer ${token}` } });
-    if (estRes.status === 404) { window.location.href = '/onboarding'; return; }
-    if (estRes.ok) setEstablishment(await estRes.json());
-
-    const sugRes = await fetch('/api/suggestions', { headers: { Authorization: `Bearer ${token}` } });
-    if (sugRes.ok) {
-      const data = await sugRes.json();
-      setCurrentSpan(data.span);
-      setSuggestions(data.suggestions || []);
-    }
+    const { span, suggestions: sugs } = await fetchSuggestions();
+    setCurrentSpan(span);
+    setSuggestions(sugs);
     setLoading(false);
   }
 
@@ -51,14 +37,25 @@ export default function DashboardPage() {
     const data = await res.json();
     setCurrentSpan(data.span);
 
-    if (data.status === 'ready') { await loadDashboard(); setGenerating(false); return; }
+    if (data.status === 'ready') {
+      invalidateSuggestions();
+      const fresh = await fetchSuggestions(true);
+      setSuggestions(fresh.suggestions);
+      setGenerating(false);
+      return;
+    }
 
     const genRes = await fetch('/api/suggestions/generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify({ span_id: data.span.id }),
     });
-    if (genRes.ok) await loadDashboard();
+    if (genRes.ok) {
+      invalidateSuggestions();
+      const fresh = await fetchSuggestions(true);
+      setCurrentSpan(fresh.span);
+      setSuggestions(fresh.suggestions);
+    }
     setGenerating(false);
   }
 
@@ -70,7 +67,9 @@ export default function DashboardPage() {
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify({ suggestion_id: suggestionId, status }),
     });
-    loadDashboard();
+    invalidateSuggestions();
+    const fresh = await fetchSuggestions(true);
+    setSuggestions(fresh.suggestions);
   }
 
   if (loading) {
@@ -121,7 +120,7 @@ export default function DashboardPage() {
         )}
       </div>
 
-      {/* Generate button — seul bouton rouge de l'ecran */}
+      {/* Generate button */}
       {suggestions.length === 0 && (
         <button onClick={generateSuggestions} disabled={generating} className="btn-rouge w-full">
           {generating ? 'on prepare le planning...' : 'generer les suggestions →'}

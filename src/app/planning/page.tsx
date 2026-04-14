@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { createBrowserClient } from '@/lib/supabase';
 import type { Suggestion, SupplySpan } from '@/lib/types';
+import { getToken, fetchSuggestions, fetchSuppliers, fetchPrepTasks, invalidatePrepTasks, invalidateSuggestions } from '@/lib/cache';
 
 interface PrepTask {
   id: string;
@@ -37,33 +37,22 @@ export default function PlanningPage() {
     }
   }, [loading]);
 
-  async function getToken() {
-    const supabase = createBrowserClient();
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) { window.location.href = '/'; return null; }
-    return session.access_token;
-  }
-
   async function loadPlanning() {
     const t = await getToken();
     if (!t) return;
     setToken(t);
-    const [sugRes, prepRes, supRes] = await Promise.all([
-      fetch('/api/suggestions', { headers: { Authorization: `Bearer ${t}` } }),
-      fetch('/api/prep-tasks', { headers: { Authorization: `Bearer ${t}` } }),
-      fetch('/api/suppliers', { headers: { Authorization: `Bearer ${t}` } }),
+
+    const [sugData, suppliers, preps] = await Promise.all([
+      fetchSuggestions(),
+      fetchSuppliers(),
+      fetchPrepTasks(),
     ]);
-    if (sugRes.ok) {
-      const data = await sugRes.json();
-      setSpan(data.span);
-      setSuggestions(data.suggestions || []);
-    }
-    if (prepRes.ok) setPrepTasks(await prepRes.json());
-    if (supRes.ok) {
-      const suppliers = await supRes.json();
-      const primary = suppliers.find((s: { is_primary: boolean }) => s.is_primary);
-      if (primary) setDeliveryDays(primary.delivery_days || []);
-    }
+
+    setSpan(sugData.span);
+    setSuggestions(sugData.suggestions);
+    setPrepTasks(preps as PrepTask[]);
+    const primary = suppliers.find((s) => s.is_primary);
+    if (primary) setDeliveryDays((primary.delivery_days as number[]) || []);
     setLoading(false);
   }
 
@@ -77,6 +66,7 @@ export default function PlanningPage() {
     setSuggestions((prev) =>
       prev.map((s) => s.id === suggestionId ? { ...s, notes: draftNote.trim() || null } : s)
     );
+    invalidateSuggestions();
     setEditingNote(null);
     setDraftNote('');
   }
@@ -91,6 +81,7 @@ export default function PlanningPage() {
     if (res.ok) {
       const task = await res.json();
       setPrepTasks((prev) => [...prev, task]);
+      invalidatePrepTasks();
     }
     setNewTaskLabel('');
   }, [newTaskLabel, token, span]);
@@ -105,6 +96,7 @@ export default function PlanningPage() {
     setPrepTasks((prev) =>
       prev.map((t) => t.id === taskId ? { ...t, scheduled_day: day, scheduled_slot: slot } : t)
     );
+    invalidatePrepTasks();
   }
 
   async function deleteTask(taskId: string) {
@@ -114,6 +106,7 @@ export default function PlanningPage() {
       headers: { Authorization: `Bearer ${token}` },
     });
     setPrepTasks((prev) => prev.filter((t) => t.id !== taskId));
+    invalidatePrepTasks();
   }
 
   if (loading) {

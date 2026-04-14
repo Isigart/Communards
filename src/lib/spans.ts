@@ -4,31 +4,35 @@ export interface SpanDefinition {
   start_day: number; // 0=Sun ... 6=Sat
   end_day: number;
   day_count: number;
+  order_day: number; // jour de commande qui declenche ce span
 }
 
 /**
- * Calcule les supply spans a partir des jours de livraison d'un fournisseur.
- * Les spans couvrent la periode entre deux livraisons consecutives.
+ * Calcule les supply spans a partir des jours de commande.
+ * Le span commence le LENDEMAIN du jour de commande
+ * et se termine le jour de la PROCHAINE commande inclus.
  *
- * Exemple: Metro livre Lundi (1) + Jeudi (4)
- *   Span 1: Lun → Mer (3 jours)
- *   Span 2: Jeu → Dim (4 jours)
+ * Exemple: commande Mardi (2) + Vendredi (5)
+ *   Commande mardi → Span: Mer (3) → Ven (5) = 3 jours
+ *   Commande vendredi → Span: Sam (6) → Mar (2) = 4 jours
  */
-export function computeSpanDefinitions(deliveryDays: number[]): SpanDefinition[] {
-  if (deliveryDays.length === 0) return [];
+export function computeSpanDefinitions(orderDays: number[]): SpanDefinition[] {
+  if (orderDays.length === 0) return [];
 
-  const sorted = [...deliveryDays].sort((a, b) => a - b);
+  const sorted = [...orderDays].sort((a, b) => a - b);
   const spans: SpanDefinition[] = [];
 
   for (let i = 0; i < sorted.length; i++) {
-    const startDay = sorted[i];
-    const nextDelivery = sorted[(i + 1) % sorted.length];
-    const dayCount = nextDelivery > startDay
-      ? nextDelivery - startDay
-      : 7 - startDay + nextDelivery;
+    const orderDay = sorted[i];
+    const nextOrderDay = sorted[(i + 1) % sorted.length];
+    const startDay = (orderDay + 1) % 7; // lendemain de la commande
 
-    const endDay = (startDay + dayCount - 1) % 7;
-    spans.push({ start_day: startDay, end_day: endDay, day_count: dayCount });
+    const dayCount = nextOrderDay > orderDay
+      ? nextOrderDay - orderDay
+      : 7 - orderDay + nextOrderDay;
+
+    const endDay = nextOrderDay;
+    spans.push({ start_day: startDay, end_day: endDay, day_count: dayCount, order_day: orderDay });
   }
 
   return spans;
@@ -68,7 +72,7 @@ function formatDate(d: Date): string {
 }
 
 /**
- * Retourne le prochain jour de livraison a partir d'aujourd'hui.
+ * Retourne le prochain jour de commande a partir d'aujourd'hui.
  */
 export function nextDeliveryDay(deliveryDays: number[], from: Date = new Date()): Date {
   const today = from.getDay();

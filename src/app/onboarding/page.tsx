@@ -193,7 +193,7 @@ export default function OnboardingPage() {
                     key={dayVal}
                     onClick={() => toggleOrderDay(dayVal)}
                     className={`py-3 rounded-lg border font-medium text-sm transition-colors ${
-                      selected ? 'border-noir bg-noir text-papier' : 'border-bordure bg-surface text-muted'
+                      selected ? 'border-rouge bg-rouge text-papier' : 'border-bordure bg-surface text-muted'
                     }`}
                   >
                     {label}

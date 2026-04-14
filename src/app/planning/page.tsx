@@ -245,7 +245,7 @@ export default function PlanningPage() {
                     isToday ? 'bg-noir/5 border-noir/20' : 'border-bordure'
                   }`}>
                     {isDeliveryDay(date) && (
-                      <span className="text-[9px] font-data uppercase bg-noir text-papier px-1.5 py-0.5 rounded-full mb-0.5">
+                      <span className="text-[9px] font-data uppercase bg-rouge text-white px-1.5 py-0.5 rounded-full mb-0.5">
                         Commande
                       </span>
                     )}
@@ -338,7 +338,7 @@ export default function PlanningPage() {
           />
           <button
             onClick={addPrepTask}
-            className="btn-secondary text-sm px-4 font-data"
+            className="btn-rouge text-sm px-4"
             disabled={!newTaskLabel.trim()}
           >
             + prep

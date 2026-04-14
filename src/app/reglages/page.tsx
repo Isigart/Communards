@@ -170,7 +170,7 @@ export default function ReglagesPage() {
                 key={dayVal}
                 onClick={() => toggleDay(dayVal)}
                 className={`py-2.5 rounded-lg border text-sm font-medium transition-colors ${
-                  selected ? 'border-noir bg-noir text-papier' : 'border-bordure bg-surface text-muted'
+                  selected ? 'border-rouge bg-rouge text-papier' : 'border-bordure bg-surface text-muted'
                 }`}
               >
                 {label}

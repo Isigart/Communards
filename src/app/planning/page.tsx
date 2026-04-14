@@ -50,7 +50,7 @@ export default function PlanningPage() {
 
     setSpan(sugData.span);
     setSuggestions(sugData.suggestions);
-    setPrepTasks(preps as PrepTask[]);
+    setPrepTasks(preps as unknown as PrepTask[]);
     const primary = suppliers.find((s) => s.is_primary);
     if (primary) setDeliveryDays((primary.delivery_days as number[]) || []);
     setLoading(false);

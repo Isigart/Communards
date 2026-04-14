@@ -366,6 +366,39 @@ export default function PlanningPage() {
           </button>
         </div>
       </div>
+
+      {/* LISTE DE COURSES */}
+      {suggestions.length > 0 && (() => {
+        const shortName = (n: string) => n.split(/\s+(surgelé|qualité|boîte|UE|France|Import|IQF|DD|en rondelles|en branches|très fins|coupés|émincés|précuit)/i)[0].trim();
+        const agg: Record<string, { quantity: number; unit: string }> = {};
+        suggestions.forEach((s) => {
+          s.ingredients.forEach((ing) => {
+            const key = shortName(ing.name);
+            const qty = parseFloat(ing.quantity) || 0;
+            if (agg[key]) {
+              agg[key].quantity += qty;
+            } else {
+              agg[key] = { quantity: qty, unit: ing.unit };
+            }
+          });
+        });
+        const sorted = Object.entries(agg).sort(([a], [b]) => a.localeCompare(b));
+        return (
+          <section className="mt-6">
+            <h2 className="font-titre text-base text-noir mb-3">Liste de courses</h2>
+            <div className="card">
+              <div className="space-y-1">
+                {sorted.map(([name, { quantity, unit }]) => (
+                  <div key={name} className="flex justify-between items-center py-0.5">
+                    <span className="text-sm text-noir">{name}</span>
+                    <span className="font-data text-sm text-muted">{quantity.toFixed(1)} {unit}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+        );
+      })()}
     </div>
   );
 }

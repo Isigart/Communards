@@ -30,13 +30,20 @@ export async function generateSuggestions(input: GenerateInput): Promise<Omit<Su
     .select('*')
     .contains('season', [season]);
 
+  const MIN_COST_PER_PERSON = 3.50;
+
   // Si pas de templates, fallback sur tous
-  const pool = templates && templates.length > 0
+  const allTemplates = templates && templates.length > 0
     ? templates
     : (await supabase.from('meal_templates').select('*')).data || [];
 
+  // Filtrer les repas en dessous du plancher
+  const pool = allTemplates.filter((t: Record<string, unknown>) =>
+    (t.estimated_cost_per_person as number) >= MIN_COST_PER_PERSON
+  );
+
   if (pool.length === 0) {
-    throw new Error('No meal templates available');
+    throw new Error('No meal templates available above minimum cost');
   }
 
   // Construire la liste compacte des repas disponibles
@@ -57,7 +64,7 @@ ${feedbackContext}
 Repas disponibles (index|nom|type|proteine|cout):
 ${templateList}
 
-Regles: varier les proteines (pas la meme 2 jours de suite), alterner les couts. Reponds UNIQUEMENT avec les index choisis en JSON:
+Regles: varier les proteines (pas la meme 2 jours de suite), alterner les couts, minimum ${MIN_COST_PER_PERSON}€/pers par repas. Reponds UNIQUEMENT avec les index choisis en JSON:
 [{"day_index":0,"meal_date":"${span.start_date}","meal_type":"lunch","template_index":5},{"day_index":0,"meal_date":"${span.start_date}","meal_type":"dinner","template_index":12}]`;
 
   const message = await client.messages.create({

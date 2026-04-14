@@ -23,6 +23,7 @@ export default function PlanningPage() {
 
   const [editingNote, setEditingNote] = useState<string | null>(null);
   const [draftNote, setDraftNote] = useState('');
+  const [expandedMeal, setExpandedMeal] = useState<string | null>(null);
   const [newTaskLabel, setNewTaskLabel] = useState('');
   const [dragging, setDragging] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -148,31 +149,59 @@ export default function PlanningPage() {
     return { day: day.charAt(0).toUpperCase() + day.slice(1), num: d.getDate() };
   };
 
-  const COL_WIDTH = 130;
+  const COL_WIDTH = 150;
+
+  const shortName = (name: string) => name.split(/\s+(surgelé|qualité|boîte|UE|France|Import|IQF|DD|en rondelles|en branches|très fins|coupés|émincés|précuit)/i)[0].trim();
 
   const renderMealCell = (meal: Suggestion | undefined, isPast: boolean) => {
     if (!meal) return null;
+    const isExpanded = expandedMeal === meal.id;
     const isEditing = editingNote === meal.id;
+
+    // Vue compacte : une ligne service + 3 ingredients
+    if (!isExpanded) {
+      return (
+        <div
+          className="bg-surface rounded border border-bordure px-1.5 py-1 mb-1 cursor-pointer hover:border-noir/30 transition-colors"
+          onClick={() => setExpandedMeal(meal.id)}
+        >
+          <p className="text-[11px] text-noir leading-snug">
+            <span className="font-data text-muted">{meal.meal_type === 'lunch' ? 'dej' : 'din'}</span>
+            {' '}
+            {meal.ingredients.slice(0, 3).map((ing) => shortName(ing.name)).join(', ')}
+          </p>
+          {meal.notes && (
+            <p className="text-[10px] text-noir/50 italic truncate">{meal.notes}</p>
+          )}
+        </div>
+      );
+    }
+
+    // Vue developpee : tous les details + edition
     return (
-      <div className="bg-surface rounded-lg border border-bordure p-1.5 mb-1">
-        <span className="font-titre text-[10px] text-muted">
-          {meal.meal_type === 'lunch' ? 'dej' : 'din'}
-        </span>
-        {meal.ingredients.slice(0, 3).map((ing, i) => (
-          <p key={i} className="text-[11px] text-noir truncate leading-tight">{ing.name}</p>
+      <div className="bg-surface rounded-lg border border-noir/20 p-2 mb-1">
+        <div className="flex justify-between items-center mb-1">
+          <span className="font-data text-[10px] text-muted">{meal.meal_type === 'lunch' ? 'dej' : 'din'}</span>
+          <button onClick={() => { setExpandedMeal(null); setEditingNote(null); }} className="text-[10px] text-muted">fermer</button>
+        </div>
+        {meal.ingredients.map((ing, i) => (
+          <div key={i} className="flex justify-between text-[11px] leading-tight">
+            <span className="text-noir">{shortName(ing.name)}</span>
+            <span className="font-data text-muted ml-1">{ing.quantity}{ing.unit}</span>
+          </div>
         ))}
-        {meal.ingredients.length > 3 && (
-          <p className="text-[10px] text-muted">+{meal.ingredients.length - 3}</p>
+        {meal.estimated_cost && (
+          <p className="font-data text-[10px] text-muted mt-1">~{meal.estimated_cost} EUR</p>
         )}
         {meal.notes && !isEditing && (
           <p
-            className="text-[10px] text-noir/60 italic mt-1 truncate cursor-pointer"
+            className="text-[10px] text-noir/60 italic mt-1 cursor-pointer"
             onClick={() => { setEditingNote(meal.id); setDraftNote(meal.notes || ''); }}
           >
             {meal.notes}
           </p>
         )}
-        {isEditing && (
+        {isEditing ? (
           <div className="mt-1">
             <input
               className="w-full border border-noir/30 rounded text-[11px] px-1 py-0.5 bg-surface"
@@ -184,8 +213,7 @@ export default function PlanningPage() {
               autoFocus
             />
           </div>
-        )}
-        {!meal.notes && !isEditing && !isPast && (
+        ) : !meal.notes && !isPast && (
           <button
             className="text-[10px] text-muted mt-1"
             onClick={() => { setEditingNote(meal.id); setDraftNote(''); }}

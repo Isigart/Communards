@@ -103,6 +103,14 @@ export default function DashboardPage() {
             <span className="text-muted">Rien de prevu. Qui cuisine ?</span>
           )}
         </div>
+        {suggestions.length > 0 && budgetTotal > 0 && (
+          <div className="mt-2 h-1.5 bg-bordure rounded-full overflow-hidden">
+            <div
+              className="h-full bg-rouge rounded-full transition-all"
+              style={{ width: `${Math.min((totalEstimated / budgetTotal) * 100, 100)}%` }}
+            />
+          </div>
+        )}
         <p className="text-xs text-muted mt-1 font-data">
           {establishment?.employee_count} pers. × {BUDGET_HCR} EUR
         </p>
@@ -124,9 +132,16 @@ export default function DashboardPage() {
       <section>
         <h2 className="font-titre text-lg text-noir mb-3">Aujourd&apos;hui</h2>
         {todaySuggestions.length === 0 ? (
-          <p className="text-sm text-muted">
-            {suggestions.length === 0 ? 'Rien de prevu. Qui cuisine ?' : 'Pas de repas prevu aujourd\'hui.'}
-          </p>
+          <div className="space-y-3">
+            <p className="text-sm text-muted">
+              {suggestions.length === 0 ? 'Rien de prevu. Qui cuisine ?' : 'Pas de repas prevu aujourd\'hui.'}
+            </p>
+            {suggestions.length > 0 && (
+              <button onClick={generateSuggestions} disabled={generating} className="btn-rouge w-full">
+                {generating ? 'on ajoute ca...' : '+ ajouter le repas du jour →'}
+              </button>
+            )}
+          </div>
         ) : (
           <div className="space-y-3">
             {todaySuggestions.map((s) => (

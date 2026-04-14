@@ -144,7 +144,7 @@ export default function OnboardingPage() {
                   key={value}
                   onClick={() => setService(value)}
                   className={`w-full p-4 rounded-xl border text-left font-medium transition-colors ${
-                    service === value ? 'border-noir bg-noir/5 text-noir' : 'border-bordure bg-surface text-muted'
+                    service === value ? 'border-rouge text-noir font-medium' : 'border-bordure bg-surface text-muted'
                   }`}
                 >
                   {label}
@@ -202,7 +202,7 @@ export default function OnboardingPage() {
               })}
             </div>
             {orderDays.length > 0 && (
-              <p className="text-sm text-muted font-data">{computeSpanDefinitions(orderDays).length} periode(s) entre commandes</p>
+              <p className="text-sm text-muted font-data">{computeSpanDefinitions(orderDays).length} {computeSpanDefinitions(orderDays).length > 1 ? 'periodes' : 'periode'} entre chaque commande</p>
             )}
           </div>
         )}
@@ -219,7 +219,7 @@ export default function OnboardingPage() {
                     key={opt.value}
                     onClick={() => toggleConstraint(opt.value)}
                     className={`py-3 px-4 rounded-lg border font-medium text-sm transition-colors ${
-                      selected ? 'border-noir bg-noir/5 text-noir' : 'border-bordure bg-surface text-muted'
+                      selected ? 'border-rouge text-noir font-medium' : 'border-bordure bg-surface text-muted'
                     }`}
                   >
                     {opt.label}

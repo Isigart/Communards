@@ -116,7 +116,7 @@ export default function DashboardPage() {
         </p>
         {currentSpan && (
           <p className="text-xs text-muted mt-1 font-data">
-            {currentSpan.start_date} → {currentSpan.end_date}
+            {new Date(currentSpan.start_date + 'T00:00:00').toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' })} → {new Date(currentSpan.end_date + 'T00:00:00').toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' })}
           </p>
         )}
       </div>

@@ -333,9 +333,11 @@ export default function PlanningPage() {
             onChange={(e) => setNewTaskDay(e.target.value)}
           >
             <option value="">Jour</option>
-            {spanDates.map((d) => (
-              <option key={d} value={d}>{formatShort(d)}</option>
-            ))}
+            {spanDates.map((d) => {
+              const diff = Math.round((new Date(d + 'T00:00:00').getTime() - new Date(today + 'T00:00:00').getTime()) / 86400000);
+              const label = diff === 0 ? 'Aujourd\'hui' : diff === 1 ? 'Demain' : `J+${diff}`;
+              return <option key={d} value={d}>{label} ({formatShort(d)})</option>;
+            })}
           </select>
           <select
             className="input text-sm w-28"

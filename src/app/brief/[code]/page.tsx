@@ -19,8 +19,8 @@ export default async function BriefPage({ params }: Props) {
     return (
       <div className="flex min-h-screen items-center justify-center p-6">
         <div className="text-center">
-          <h1 className="text-xl font-bold text-red-600">Code invalide ou expire</h1>
-          <p className="text-gray-500 mt-2">Demandez un nouveau code au chef.</p>
+          <h1 className="font-titre text-xl text-noir">Code invalide ou expire</h1>
+          <p className="text-muted mt-2">Demande un nouveau code au chef.</p>
         </div>
       </div>
     );
@@ -39,10 +39,17 @@ export default async function BriefPage({ params }: Props) {
     .eq('id', brief.establishment_id)
     .single();
 
+  const { data: prepTasks } = await supabase
+    .from('prep_tasks')
+    .select('*')
+    .eq('span_id', brief.span_id)
+    .order('created_at', { ascending: true });
+
   return (
     <BriefDisplay
       establishmentName={establishment?.name || ''}
       suggestions={suggestions || []}
+      prepTasks={prepTasks || []}
       span={brief.supply_spans}
     />
   );

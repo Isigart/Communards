@@ -23,8 +23,8 @@ export default function BriefingPage() {
 
   async function loadData() {
     const [sugData, preps] = await Promise.all([
-      fetchSuggestions(),
-      fetchPrepTasks(),
+      fetchSuggestions(true),
+      fetchPrepTasks(true),
     ]);
     setSpan(sugData.span);
     setSuggestions(sugData.suggestions);

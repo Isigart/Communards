@@ -1,7 +1,9 @@
 'use client';
 
+import { useEffect } from 'react';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
+import { prefetchAll } from '@/lib/cache';
 
 const NAV_ITEMS = [
   { href: '/dashboard', label: 'Accueil' },
@@ -14,10 +16,16 @@ const HIDDEN_ON = ['/', '/onboarding', '/demo', '/enquete'];
 
 export default function NavHeader() {
   const pathname = usePathname();
+  const isVisible = !HIDDEN_ON.includes(pathname) && !pathname.startsWith('/brief/');
 
-  if (HIDDEN_ON.includes(pathname) || pathname.startsWith('/brief/')) {
-    return null;
-  }
+  // Prefetch toutes les donnees des que le header est visible
+  useEffect(() => {
+    if (isVisible) {
+      prefetchAll();
+    }
+  }, [isVisible]);
+
+  if (!isVisible) return null;
 
   return (
     <header className="sticky top-0 z-50 bg-papier border-b border-bordure">

@@ -92,3 +92,18 @@ export function invalidateAll() {
   cachedSuppliers = null;
   cachedPrepTasks = null;
 }
+
+// Prefetch tout en parallele — a appeler au premier chargement
+let prefetched = false;
+export async function prefetchAll(): Promise<void> {
+  if (prefetched) return;
+  prefetched = true;
+  const token = await getToken();
+  if (!token) return;
+  await Promise.all([
+    fetchEstablishment(),
+    fetchSuggestions(),
+    fetchSuppliers(),
+    fetchPrepTasks(),
+  ]);
+}

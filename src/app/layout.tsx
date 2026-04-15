@@ -20,7 +20,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="fr">
       <body className="min-h-screen">
         <NavHeader />
-        {children}
+        <div className="page-transition">
+          {children}
+        </div>
       </body>
     </html>
   );

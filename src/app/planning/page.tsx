@@ -170,7 +170,10 @@ export default function PlanningPage() {
             {' '}
             {meal.ingredients.slice(0, 3).map((ing) => shortName(ing.name)).join(', ')}
           </p>
-          {meal.notes && <p className="text-[10px] text-noir/50 italic truncate">{meal.notes}</p>}
+          {meal.notes
+            ? <p className="text-[10px] text-noir/50 italic truncate">{meal.notes}</p>
+            : !isPast && <p className="text-[10px] text-muted/40">+ annoter</p>
+          }
         </div>
       );
     }

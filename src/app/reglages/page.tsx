@@ -1,10 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { createBrowserClient } from '@/lib/supabase';
 import type { Establishment } from '@/lib/types';
 import { BUDGET_HCR } from '@/lib/types';
 import { computeSpanDefinitions } from '@/lib/spans';
+import { getToken, fetchEstablishment, fetchSuppliers, invalidateEstablishment, invalidateSuppliers, invalidateSuggestions } from '@/lib/cache';
 
 type ServiceType = 'lunch' | 'dinner' | 'both';
 
@@ -34,14 +34,12 @@ export default function ReglagesPage() {
   useEffect(() => { loadSettings(); }, []);
 
   async function loadSettings() {
-    const supabase = createBrowserClient();
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) { window.location.href = '/'; return; }
-    setToken(session.access_token);
+    const t = await getToken();
+    if (!t) return;
+    setToken(t);
 
-    const res = await fetch('/api/establishment', { headers: { Authorization: `Bearer ${session.access_token}` } });
-    if (res.ok) {
-      const est: Establishment = await res.json();
+    const est = await fetchEstablishment();
+    if (est) {
       setName(est.name);
       setEmployeeCount(est.employee_count);
       if (est.services?.includes('lunch') && est.services?.includes('dinner')) setService('both');
@@ -50,14 +48,11 @@ export default function ReglagesPage() {
       setConstraints(est.dietary_constraints?.length > 0 ? est.dietary_constraints : ['aucune']);
     }
 
-    const supRes = await fetch('/api/suppliers', { headers: { Authorization: `Bearer ${session.access_token}` } });
-    if (supRes.ok) {
-      const suppliers = await supRes.json();
-      const primary = suppliers.find((s: { is_primary: boolean }) => s.is_primary);
-      if (primary) {
-        setDeliveryDays(primary.delivery_days || []);
-        setSupplierId(primary.id);
-      }
+    const suppliers = await fetchSuppliers();
+    const primary = suppliers.find((s) => s.is_primary);
+    if (primary) {
+      setDeliveryDays((primary.delivery_days as number[]) || []);
+      setSupplierId(primary.id as string);
     }
     setLoading(false);
   }
@@ -113,6 +108,9 @@ export default function ReglagesPage() {
       }
     }
 
+    invalidateEstablishment();
+    invalidateSuppliers();
+    invalidateSuggestions();
     setSaving(false);
     window.location.href = '/dashboard';
   }

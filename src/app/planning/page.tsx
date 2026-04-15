@@ -280,7 +280,7 @@ export default function PlanningPage() {
                   <div
                     className={`h-44 p-1 border-b border-bordure overflow-y-auto ${dragging ? 'bg-noir/5' : ''}`}
                     onDragOver={(e) => e.preventDefault()}
-                    onDrop={() => { if (dragging) { moveTask(dragging, date, 'matin'); setDragging(null); } }}
+                    onDrop={async () => { if (dragging) { await moveTask(dragging, date, 'matin'); setDragging(null); } }}
                   >
                     {renderMealCell(lunch, isPast)}
                     {prepsMatin.map((task) => (
@@ -300,7 +300,7 @@ export default function PlanningPage() {
                   <div
                     className={`h-44 p-1 overflow-y-auto ${dragging ? 'bg-noir/5' : ''}`}
                     onDragOver={(e) => e.preventDefault()}
-                    onDrop={() => { if (dragging) { moveTask(dragging, date, 'soir'); setDragging(null); } }}
+                    onDrop={async () => { if (dragging) { await moveTask(dragging, date, 'soir'); setDragging(null); } }}
                   >
                     {renderMealCell(dinner, isPast)}
                     {prepsSoir.map((task) => (
@@ -330,7 +330,7 @@ export default function PlanningPage() {
               dragging ? 'border-rouge/30 bg-rouge/5' : 'border-bordure'
             }`}
             onDragOver={(e) => e.preventDefault()}
-            onDrop={() => { if (dragging) { moveTask(dragging, null, null); setDragging(null); } }}
+            onDrop={async () => { if (dragging) { await moveTask(dragging, null, null); setDragging(null); } }}
           >
             <p className="text-xs text-muted mb-2">A placer — glisser vers un creneau</p>
             <div className="flex flex-wrap gap-2">

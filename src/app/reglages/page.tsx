@@ -27,6 +27,7 @@ export default function ReglagesPage() {
   const [service, setService] = useState<ServiceType>('lunch');
   const [employeeCount, setEmployeeCount] = useState(12);
   const [deliveryDays, setDeliveryDays] = useState<number[]>([]);
+  const [planningDays, setPlanningDays] = useState(7);
   const [supplierId, setSupplierId] = useState<string | null>(null);
   const [constraints, setConstraints] = useState<string[]>([]);
   const [constraintOther, setConstraintOther] = useState('');
@@ -46,12 +47,14 @@ export default function ReglagesPage() {
       else if (est.services?.includes('dinner')) setService('dinner');
       else setService('lunch');
       setConstraints(est.dietary_constraints?.length > 0 ? est.dietary_constraints : ['aucune']);
+      setPlanningDays(est.planning_days || 7);
     }
 
     const suppliers = await fetchSuppliers();
     const primary = suppliers.find((s) => s.is_primary);
     if (primary) {
       setDeliveryDays((primary.delivery_days as number[]) || []);
+      setOrderFrequency((primary.order_frequency as number) || 1);
       setSupplierId(primary.id as string);
     }
     setLoading(false);
@@ -80,7 +83,7 @@ export default function ReglagesPage() {
     await fetch('/api/establishment', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ name, employee_count: employeeCount, services, dietary_constraints: dietaryConstraints }),
+      body: JSON.stringify({ name, employee_count: employeeCount, services, dietary_constraints: dietaryConstraints, planning_days: planningDays }),
     });
 
     if (supplierId) {
@@ -179,6 +182,24 @@ export default function ReglagesPage() {
         {deliveryDays.length > 0 && (
           <p className="text-xs text-muted font-data">{computeSpanDefinitions(deliveryDays).length} {computeSpanDefinitions(deliveryDays).length > 1 ? 'periodes' : 'periode'} entre chaque commande</p>
         )}
+      </section>
+
+      <section className="card space-y-3">
+        <h2 className="font-titre text-sm text-noir">Duree du planning</h2>
+        <p className="text-xs text-muted">Combien de jours de repas generer ?</p>
+        <div className="flex gap-2">
+          {[7, 14, 21].map((d) => (
+            <button
+              key={d}
+              onClick={() => setPlanningDays(d)}
+              className={`flex-1 py-2.5 rounded-lg border text-sm font-data transition-colors ${
+                planningDays === d ? 'border-rouge bg-rouge text-papier' : 'border-bordure bg-surface text-muted'
+              }`}
+            >
+              {d}j
+            </button>
+          ))}
+        </div>
       </section>
 
       <section className="card space-y-3">

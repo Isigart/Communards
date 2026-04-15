@@ -2,8 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { authenticate } from '@/lib/auth';
 import { createServerClient } from '@/lib/supabase';
 import { getCached, setCache } from '@/lib/redis';
-import { generateWeekSpans } from '@/lib/spans';
 import type { Suggestion, SupplySpan } from '@/lib/types';
+
+function formatDate(d: Date): string {
+  return d.toISOString().split('T')[0];
+}
 
 export async function GET(req: NextRequest) {
   const auth = await authenticate(req);
@@ -83,18 +86,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'No primary supplier configured' }, { status: 400 });
   }
 
-  // Generate spans for this week
-  const weekStart = getWeekStart(new Date());
-  const spanDefs = generateWeekSpans(supplier, weekStart);
+  // Generer un span de planning_days jours a partir de demain
+  const planningDays = auth.establishment.planning_days || 7;
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const endDate = new Date(tomorrow);
+  endDate.setDate(endDate.getDate() + planningDays - 1);
 
-  const today = new Date().toISOString().split('T')[0];
-  const currentSpanDef = spanDefs.find(
-    (s) => s.start_date <= today && s.end_date >= today
-  ) || spanDefs[0];
-
-  if (!currentSpanDef) {
-    return NextResponse.json({ error: 'Could not determine current span' }, { status: 500 });
-  }
+  const currentSpanDef = {
+    start_date: formatDate(tomorrow),
+    end_date: formatDate(endDate),
+    day_count: planningDays,
+  };
 
   // If regenerate, clean up old data
   if (forceRegenerate) {
@@ -157,11 +160,4 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({ span: newSpan, status: 'pending' });
 }
 
-function getWeekStart(date: Date): Date {
-  const d = new Date(date);
-  const day = d.getDay();
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-  d.setDate(diff);
-  d.setHours(0, 0, 0, 0);
-  return d;
-}
+

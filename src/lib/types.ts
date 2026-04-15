@@ -15,6 +15,7 @@ export interface Establishment {
   language: string;
   services: string[];
   dietary_constraints: string[];
+  planning_days: number;
   created_at: string;
   updated_at: string;
 }

@@ -358,36 +358,64 @@ export default function PlanningPage() {
         </div>
       </div>
 
-      {/* LISTE DE COURSES */}
-      {suggestions.length > 0 && (() => {
-        const agg: Record<string, { quantity: number; unit: string }> = {};
-        suggestions.forEach((s) => {
-          s.ingredients.forEach((ing) => {
-            const key = shortName(ing.name);
-            const qty = parseFloat(ing.quantity) || 0;
-            if (agg[key]) {
-              agg[key].quantity += qty;
-            } else {
-              agg[key] = { quantity: qty, unit: ing.unit };
-            }
-          });
+      {/* LISTES DE COURSES PAR SPAN INTER-COMMANDE */}
+      {suggestions.length > 0 && deliveryDays.length > 0 && (() => {
+        // Decouper les suggestions par span inter-commande
+        const orderSpans: { label: string; dates: string[] }[] = [];
+        let currentDates: string[] = [];
+        let currentStart = '';
+
+        spanDates.forEach((date) => {
+          if (!currentStart) currentStart = date;
+          currentDates.push(date);
+          // Si le lendemain est un jour de commande, on ferme le span
+          const nextDate = new Date(date + 'T00:00:00');
+          nextDate.setDate(nextDate.getDate() + 1);
+          const nextDay = nextDate.getDay();
+          if (deliveryDays.includes(nextDay) || date === spanDates[spanDates.length - 1]) {
+            orderSpans.push({
+              label: `${formatShort(currentStart)} → ${formatShort(date)}`,
+              dates: [...currentDates],
+            });
+            currentDates = [];
+            currentStart = '';
+          }
         });
-        const sorted = Object.entries(agg).sort(([a], [b]) => a.localeCompare(b));
-        return (
-          <section className="mt-6">
-            <h2 className="font-titre text-base text-noir mb-3">Liste de courses</h2>
-            <div className="card">
-              <div className="space-y-1">
-                {sorted.map(([name, { quantity, unit }]) => (
-                  <div key={name} className="flex justify-between items-center py-0.5">
-                    <span className="text-sm text-noir">{name}</span>
-                    <span className="font-data text-sm text-muted">{quantity.toFixed(1)} {unit}</span>
-                  </div>
-                ))}
+
+        return orderSpans.map((os, idx) => {
+          const agg: Record<string, { quantity: number; unit: string }> = {};
+          suggestions
+            .filter((s) => os.dates.includes(s.meal_date))
+            .forEach((s) => {
+              s.ingredients.forEach((ing) => {
+                const key = shortName(ing.name);
+                const qty = parseFloat(ing.quantity) || 0;
+                if (agg[key]) {
+                  agg[key].quantity += qty;
+                } else {
+                  agg[key] = { quantity: qty, unit: ing.unit };
+                }
+              });
+            });
+          const sorted = Object.entries(agg).sort(([a], [b]) => a.localeCompare(b));
+          if (sorted.length === 0) return null;
+          return (
+            <section key={idx} className="mt-6">
+              <h2 className="font-titre text-base text-noir mb-1">Liste de courses</h2>
+              <p className="text-xs font-data text-muted mb-3">{os.label}</p>
+              <div className="card">
+                <div className="space-y-1">
+                  {sorted.map(([name, { quantity, unit }]) => (
+                    <div key={name} className="flex justify-between items-center py-0.5">
+                      <span className="text-sm text-noir">{name}</span>
+                      <span className="font-data text-sm text-muted">{quantity.toFixed(1)} {unit}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
-            </div>
-          </section>
-        );
+            </section>
+          );
+        });
       })()}
     </div>
   );

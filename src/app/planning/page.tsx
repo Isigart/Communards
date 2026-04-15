@@ -24,8 +24,12 @@ export default function PlanningPage() {
   const [editingNote, setEditingNote] = useState<string | null>(null);
   const [draftNote, setDraftNote] = useState('');
   const [expandedMeal, setExpandedMeal] = useState<string | null>(null);
+
+  // Ajout de prep
   const [newTaskLabel, setNewTaskLabel] = useState('');
-  const [dragging, setDragging] = useState<string | null>(null);
+  const [newTaskDay, setNewTaskDay] = useState('');
+  const [newTaskSlot, setNewTaskSlot] = useState('matin');
+
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => { loadPlanning(); }, []);
@@ -45,7 +49,7 @@ export default function PlanningPage() {
     const [sugData, suppliers, preps] = await Promise.all([
       fetchSuggestions(),
       fetchSuppliers(),
-      fetchPrepTasks(),
+      fetchPrepTasks(true), // force refresh pour avoir les derniers placements
     ]);
 
     setSpan(sugData.span);
@@ -76,7 +80,12 @@ export default function PlanningPage() {
     const res = await fetch('/api/prep-tasks', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ span_id: span.id, label: newTaskLabel.trim() }),
+      body: JSON.stringify({
+        span_id: span.id,
+        label: newTaskLabel.trim(),
+        scheduled_day: newTaskDay || null,
+        scheduled_slot: newTaskDay ? newTaskSlot : null,
+      }),
     });
     if (res.ok) {
       const task = await res.json();
@@ -84,20 +93,7 @@ export default function PlanningPage() {
       invalidatePrepTasks();
     }
     setNewTaskLabel('');
-  }, [newTaskLabel, token, span]);
-
-  async function moveTask(taskId: string, day: string | null, slot: string | null) {
-    if (!token) return;
-    await fetch('/api/prep-tasks', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ id: taskId, scheduled_day: day, scheduled_slot: slot }),
-    });
-    setPrepTasks((prev) =>
-      prev.map((t) => t.id === taskId ? { ...t, scheduled_day: day, scheduled_slot: slot } : t)
-    );
-    invalidatePrepTasks();
-  }
+  }, [newTaskLabel, newTaskDay, newTaskSlot, token, span]);
 
   async function deleteTask(taskId: string) {
     if (!token) return;
@@ -126,6 +122,16 @@ export default function PlanningPage() {
     }
   }
 
+  // Jours du span uniquement (pour le select)
+  const spanDates: string[] = [];
+  if (span) {
+    const start = new Date(span.start_date + 'T00:00:00');
+    const end = new Date(span.end_date + 'T00:00:00');
+    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+      spanDates.push(d.toISOString().split('T')[0]);
+    }
+  }
+
   const getMeal = (date: string, type: string) =>
     suggestions.find((s) => s.meal_date === date && s.meal_type === type);
   const isDeliveryDay = (date: string) => {
@@ -134,13 +140,15 @@ export default function PlanningPage() {
   };
   const getPreps = (date: string, slot: string) =>
     prepTasks.filter((t) => t.scheduled_day === date && t.scheduled_slot === slot);
-  const unassigned = prepTasks.filter((t) => !t.scheduled_day);
 
   const formatDay = (date: string) => {
     const d = new Date(date + 'T00:00:00');
     const day = d.toLocaleDateString('fr-FR', { weekday: 'short' });
     return { day: day.charAt(0).toUpperCase() + day.slice(1), num: d.getDate() };
   };
+
+  const formatShort = (date: string) =>
+    new Date(date + 'T00:00:00').toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric' });
 
   const COL_WIDTH = 150;
 
@@ -151,7 +159,6 @@ export default function PlanningPage() {
     const isExpanded = expandedMeal === meal.id;
     const isEditing = editingNote === meal.id;
 
-    // Vue compacte : une ligne service + 3 ingredients
     if (!isExpanded) {
       return (
         <div
@@ -163,14 +170,11 @@ export default function PlanningPage() {
             {' '}
             {meal.ingredients.slice(0, 3).map((ing) => shortName(ing.name)).join(', ')}
           </p>
-          {meal.notes && (
-            <p className="text-[10px] text-noir/50 italic truncate">{meal.notes}</p>
-          )}
+          {meal.notes && <p className="text-[10px] text-noir/50 italic truncate">{meal.notes}</p>}
         </div>
       );
     }
 
-    // Vue developpee : tous les details + edition
     return (
       <div className="bg-surface rounded-lg border border-noir/20 p-2 mb-1">
         <div className="flex justify-between items-center mb-1">
@@ -187,10 +191,7 @@ export default function PlanningPage() {
           <p className="font-data text-[10px] text-muted mt-1">~{meal.estimated_cost} EUR</p>
         )}
         {meal.notes && !isEditing && (
-          <p
-            className="text-[10px] text-noir/60 italic mt-1 cursor-pointer"
-            onClick={() => { setEditingNote(meal.id); setDraftNote(meal.notes || ''); }}
-          >
+          <p className="text-[10px] text-noir/60 italic mt-1 cursor-pointer" onClick={() => { setEditingNote(meal.id); setDraftNote(meal.notes || ''); }}>
             {meal.notes}
           </p>
         )}
@@ -207,10 +208,7 @@ export default function PlanningPage() {
             />
           </div>
         ) : !meal.notes && !isPast && (
-          <button
-            className="text-[10px] text-muted mt-1"
-            onClick={() => { setEditingNote(meal.id); setDraftNote(''); }}
-          >
+          <button className="text-[10px] text-muted mt-1" onClick={() => { setEditingNote(meal.id); setDraftNote(''); }}>
             + note
           </button>
         )}
@@ -266,9 +264,7 @@ export default function PlanningPage() {
                     isToday ? 'bg-noir/5 border-noir/20' : 'border-bordure'
                   }`}>
                     {isDeliveryDay(date) && (
-                      <span className="text-[9px] font-data uppercase bg-rouge text-white px-1.5 py-0.5 rounded-full mb-0.5">
-                        Commande
-                      </span>
+                      <span className="text-[9px] font-data uppercase bg-rouge text-white px-1.5 py-0.5 rounded-full mb-0.5">Commande</span>
                     )}
                     <span className={`text-[10px] uppercase ${isToday ? 'text-noir font-bold' : 'text-muted'}`}>
                       {isToday ? 'Auj.' : day}
@@ -277,19 +273,10 @@ export default function PlanningPage() {
                   </div>
 
                   {/* MATIN */}
-                  <div
-                    className={`h-44 p-1 border-b border-bordure overflow-y-auto ${dragging ? 'bg-noir/5' : ''}`}
-                    onDragOver={(e) => e.preventDefault()}
-                    onDrop={async () => { if (dragging) { await moveTask(dragging, date, 'matin'); setDragging(null); } }}
-                  >
+                  <div className="h-44 p-1 border-b border-bordure overflow-y-auto">
                     {renderMealCell(lunch, isPast)}
                     {prepsMatin.map((task) => (
-                      <div
-                        key={task.id}
-                        draggable
-                        onDragStart={() => setDragging(task.id)}
-                        className="bg-noir/5 text-noir border border-bordure rounded px-1.5 py-0.5 text-[11px] font-data mb-0.5 cursor-grab active:cursor-grabbing flex items-center justify-between"
-                      >
+                      <div key={task.id} className="bg-noir/5 text-noir border border-bordure rounded px-1.5 py-0.5 text-[11px] font-data mb-0.5 flex items-center justify-between">
                         <span className="truncate">{task.label}</span>
                         {!isPast && <button onClick={() => deleteTask(task.id)} className="text-muted hover:text-rouge ml-1 text-[10px] shrink-0">x</button>}
                       </div>
@@ -297,19 +284,10 @@ export default function PlanningPage() {
                   </div>
 
                   {/* SOIR */}
-                  <div
-                    className={`h-44 p-1 overflow-y-auto ${dragging ? 'bg-noir/5' : ''}`}
-                    onDragOver={(e) => e.preventDefault()}
-                    onDrop={async () => { if (dragging) { await moveTask(dragging, date, 'soir'); setDragging(null); } }}
-                  >
+                  <div className="h-44 p-1 overflow-y-auto">
                     {renderMealCell(dinner, isPast)}
                     {prepsSoir.map((task) => (
-                      <div
-                        key={task.id}
-                        draggable
-                        onDragStart={() => setDragging(task.id)}
-                        className="bg-noir/5 text-noir border border-bordure rounded px-1.5 py-0.5 text-[11px] font-data mb-0.5 cursor-grab active:cursor-grabbing flex items-center justify-between"
-                      >
+                      <div key={task.id} className="bg-noir/5 text-noir border border-bordure rounded px-1.5 py-0.5 text-[11px] font-data mb-0.5 flex items-center justify-between">
                         <span className="truncate">{task.label}</span>
                         {!isPast && <button onClick={() => deleteTask(task.id)} className="text-muted hover:text-rouge ml-1 text-[10px] shrink-0">x</button>}
                       </div>
@@ -322,54 +300,49 @@ export default function PlanningPage() {
         </div>
       </div>
 
-      {/* PREPS NON PLACEES + AJOUT */}
-      <div className="space-y-3 mt-4">
-        {unassigned.length > 0 && (
-          <div
-            className={`p-3 rounded-lg border-2 border-dashed transition-colors ${
-              dragging ? 'border-rouge/30 bg-rouge/5' : 'border-bordure'
-            }`}
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={async () => { if (dragging) { await moveTask(dragging, null, null); setDragging(null); } }}
-          >
-            <p className="text-xs text-muted mb-2">A placer — glisser vers un creneau</p>
-            <div className="flex flex-wrap gap-2">
-              {unassigned.map((task) => (
-                <div
-                  key={task.id}
-                  draggable
-                  onDragStart={() => setDragging(task.id)}
-                  className="bg-noir/5 text-noir border border-bordure rounded-lg px-3 py-1.5 text-xs font-data cursor-grab active:cursor-grabbing inline-flex items-center"
-                >
-                  {task.label}
-                  <button onClick={() => deleteTask(task.id)} className="ml-2 text-muted hover:text-rouge">x</button>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
+      {/* AJOUTER UNE PREP */}
+      <div className="mt-4 space-y-2">
+        <h2 className="font-titre text-sm text-noir">Ajouter une prep</h2>
         <div className="flex gap-2">
           <input
             className="input text-sm flex-1"
-            placeholder="Nouvelle prep..."
+            placeholder="Ex: puree, marinade..."
             value={newTaskLabel}
             onChange={(e) => setNewTaskLabel(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && addPrepTask()}
           />
+        </div>
+        <div className="flex gap-2">
+          <select
+            className="input text-sm flex-1"
+            value={newTaskDay}
+            onChange={(e) => setNewTaskDay(e.target.value)}
+          >
+            <option value="">Jour</option>
+            {spanDates.map((d) => (
+              <option key={d} value={d}>{formatShort(d)}</option>
+            ))}
+          </select>
+          <select
+            className="input text-sm w-24"
+            value={newTaskSlot}
+            onChange={(e) => setNewTaskSlot(e.target.value)}
+          >
+            <option value="matin">Matin</option>
+            <option value="soir">Soir</option>
+          </select>
           <button
             onClick={addPrepTask}
             className="btn-rouge text-sm px-4"
             disabled={!newTaskLabel.trim()}
           >
-            + prep
+            +
           </button>
         </div>
       </div>
 
       {/* LISTE DE COURSES */}
       {suggestions.length > 0 && (() => {
-        const shortName = (n: string) => n.split(/\s+(surgelé|qualité|boîte|UE|France|Import|IQF|DD|en rondelles|en branches|très fins|coupés|émincés|précuit)/i)[0].trim();
         const agg: Record<string, { quantity: number; unit: string }> = {};
         suggestions.forEach((s) => {
           s.ingredients.forEach((ing) => {

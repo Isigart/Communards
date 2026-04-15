@@ -250,7 +250,7 @@ export default function PlanningPage() {
               const lunch = getMeal(date, 'lunch');
               const dinner = getMeal(date, 'dinner');
               const prepsMatin = getPreps(date, 'matin');
-              const prepsSoir = getPreps(date, 'soir');
+              const prepsSoir = getPreps(date, 'aprem');
 
               return (
                 <div
@@ -329,7 +329,7 @@ export default function PlanningPage() {
             onChange={(e) => setNewTaskSlot(e.target.value)}
           >
             <option value="matin">Matin</option>
-            <option value="soir">Soir</option>
+            <option value="aprem">Soir</option>
           </select>
           <button
             onClick={addPrepTask}

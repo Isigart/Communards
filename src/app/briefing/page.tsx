@@ -56,7 +56,7 @@ export default function BriefingPage() {
   const today = new Date().toISOString().split('T')[0];
   const todayMeals = suggestions.filter((s) => s.meal_date === today);
   const todayPrepsMatin = prepTasks.filter((t) => t.scheduled_day === today && t.scheduled_slot === 'matin');
-  const todayPrepsSoir = prepTasks.filter((t) => t.scheduled_day === today && t.scheduled_slot === 'soir');
+  const todayPrepsSoir = prepTasks.filter((t) => t.scheduled_day === today && t.scheduled_slot === 'aprem');
   const hasTodayPreps = todayPrepsMatin.length > 0 || todayPrepsSoir.length > 0;
   const upcoming = suggestions.filter((s) => s.meal_date > today);
 

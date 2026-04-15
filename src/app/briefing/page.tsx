@@ -2,11 +2,19 @@
 
 import { useEffect, useState } from 'react';
 import type { Suggestion, SupplySpan } from '@/lib/types';
-import { getToken, fetchSuggestions } from '@/lib/cache';
+import { getToken, fetchSuggestions, fetchPrepTasks } from '@/lib/cache';
+
+interface PrepTask {
+  id: string;
+  label: string;
+  scheduled_day: string | null;
+  scheduled_slot: string | null;
+}
 
 export default function BriefingPage() {
   const [span, setSpan] = useState<SupplySpan | null>(null);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  const [prepTasks, setPrepTasks] = useState<PrepTask[]>([]);
   const [briefCode, setBriefCode] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
@@ -14,9 +22,13 @@ export default function BriefingPage() {
   useEffect(() => { loadData(); }, []);
 
   async function loadData() {
-    const { span: s, suggestions: sugs } = await fetchSuggestions();
-    setSpan(s);
-    setSuggestions(sugs);
+    const [sugData, preps] = await Promise.all([
+      fetchSuggestions(),
+      fetchPrepTasks(),
+    ]);
+    setSpan(sugData.span);
+    setSuggestions(sugData.suggestions);
+    setPrepTasks(preps as unknown as PrepTask[]);
     setLoading(false);
   }
 
@@ -43,6 +55,9 @@ export default function BriefingPage() {
 
   const today = new Date().toISOString().split('T')[0];
   const todayMeals = suggestions.filter((s) => s.meal_date === today);
+  const todayPrepsMatin = prepTasks.filter((t) => t.scheduled_day === today && t.scheduled_slot === 'matin');
+  const todayPrepsSoir = prepTasks.filter((t) => t.scheduled_day === today && t.scheduled_slot === 'soir');
+  const hasTodayPreps = todayPrepsMatin.length > 0 || todayPrepsSoir.length > 0;
   const upcoming = suggestions.filter((s) => s.meal_date > today);
 
   return (
@@ -68,6 +83,34 @@ export default function BriefingPage() {
         </div>
       )}
 
+      {/* Preps du jour */}
+      {hasTodayPreps && (
+        <section>
+          <h2 className="font-titre text-base text-noir mb-3">Preps du jour</h2>
+          {todayPrepsMatin.length > 0 && (
+            <div className="mb-2">
+              <p className="text-xs text-muted font-data mb-1">matin</p>
+              {todayPrepsMatin.map((task) => (
+                <div key={task.id} className="card py-2 mb-1">
+                  <p className="text-sm text-noir">{task.label}</p>
+                </div>
+              ))}
+            </div>
+          )}
+          {todayPrepsSoir.length > 0 && (
+            <div>
+              <p className="text-xs text-muted font-data mb-1">soir</p>
+              {todayPrepsSoir.map((task) => (
+                <div key={task.id} className="card py-2 mb-1">
+                  <p className="text-sm text-noir">{task.label}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* Repas du jour */}
       <section>
         <h2 className="font-titre text-base text-noir mb-3">Aujourd&apos;hui</h2>
         {todayMeals.length === 0 ? (
@@ -96,24 +139,33 @@ export default function BriefingPage() {
         )}
       </section>
 
+      {/* A venir */}
       {upcoming.length > 0 && (
         <section>
           <h2 className="font-titre text-base text-noir mb-3">A venir</h2>
           <div className="space-y-2">
-            {upcoming.map((s) => (
-              <div key={s.id} className="card py-2.5">
-                <div className="flex justify-between items-center">
-                  <span className="font-titre text-sm text-noir">
-                    {new Date(s.meal_date + 'T00:00:00').toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric' })}
-                    {' — '}{s.meal_type === 'lunch' ? 'Dej' : 'Din'}
-                  </span>
-                  <span className="text-xs text-muted">
-                    {s.ingredients.map((ing) => ing.name).join(', ')}
-                  </span>
+            {upcoming.map((s) => {
+              const dayPreps = prepTasks.filter((t) => t.scheduled_day === s.meal_date);
+              return (
+                <div key={s.id} className="card py-2.5">
+                  <div className="flex justify-between items-center">
+                    <span className="font-titre text-sm text-noir">
+                      {new Date(s.meal_date + 'T00:00:00').toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric' })}
+                      {' — '}{s.meal_type === 'lunch' ? 'Dej' : 'Din'}
+                    </span>
+                    <span className="text-xs text-muted">
+                      {s.ingredients.slice(0, 3).map((ing) => ing.name).join(', ')}
+                    </span>
+                  </div>
+                  {s.notes && <p className="text-xs text-noir/60 italic mt-1">{s.notes}</p>}
+                  {dayPreps.length > 0 && (
+                    <p className="text-xs font-data text-muted mt-1">
+                      preps : {dayPreps.map((t) => t.label).join(', ')}
+                    </p>
+                  )}
                 </div>
-                {s.notes && <p className="text-xs text-noir/60 italic mt-1">{s.notes}</p>}
-              </div>
-            ))}
+              );
+            })}
           </div>
         </section>
       )}

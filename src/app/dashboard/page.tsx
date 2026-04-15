@@ -161,10 +161,9 @@ export default function DashboardPage() {
                 {s.notes && (
                   <p className="text-xs text-noir/60 mt-2 italic">{s.notes}</p>
                 )}
-                <div className="flex gap-2 mt-3">
-                  <button onClick={() => handleFeedback(s.id, 'done')} className="flex-1 text-sm py-1.5 rounded-lg border border-bordure text-noir hover:bg-noir/5">Fait</button>
-                  <button onClick={() => handleFeedback(s.id, 'modified')} className="flex-1 text-sm py-1.5 rounded-lg border border-bordure text-noir hover:bg-noir/5">Modifie</button>
-                  <button onClick={() => handleFeedback(s.id, 'skipped')} className="flex-1 text-sm py-1.5 rounded-lg border border-bordure text-muted hover:bg-noir/5">Pas fait</button>
+                <div className="flex gap-3 mt-3 justify-end">
+                  <button onClick={() => handleFeedback(s.id, 'done')} className="text-xl leading-none opacity-40 hover:opacity-100 transition-opacity" title="Bon repas">&#x1F44D;</button>
+                  <button onClick={() => handleFeedback(s.id, 'skipped')} className="text-xl leading-none opacity-40 hover:opacity-100 transition-opacity" title="Pas top">&#x1F44E;</button>
                 </div>
               </div>
             ))}

@@ -51,11 +51,43 @@ export async function generateSuggestions(input: GenerateInput): Promise<Omit<Su
     `${i}|${t.name}|${t.meal_type}|${t.protein_type}|${(t.estimated_cost_per_person as number)?.toFixed(2)}€`
   ).join('\n');
 
-  const feedbackContext = pastFeedback.length > 0
-    ? `\nRepas recents (eviter de repeter): ${pastFeedback.slice(0, 10).map(f =>
-        `${f.status}${f.notes ? `: ${f.notes}` : ''}`
-      ).join(', ')}`
-    : '';
+  // Construire le contexte feedback avec les noms des repas
+  let feedbackContext = '';
+  if (pastFeedback.length > 0) {
+    // Charger les suggestions associees aux feedbacks
+    const feedbackSuggestionIds = pastFeedback.map(f => f.suggestion_id).filter(Boolean);
+    let feedbackSuggestions: Record<string, unknown>[] = [];
+    if (feedbackSuggestionIds.length > 0) {
+      const { data } = await supabase
+        .from('suggestions')
+        .select('id, ingredients')
+        .in('id', feedbackSuggestionIds);
+      feedbackSuggestions = data || [];
+    }
+
+    const liked = pastFeedback
+      .filter(f => f.status === 'done')
+      .map(f => {
+        const sug = feedbackSuggestions.find(s => s.id === f.suggestion_id);
+        if (!sug) return null;
+        const ings = (sug.ingredients as { name: string }[]) || [];
+        return ings.slice(0, 2).map(i => i.name).join(', ');
+      })
+      .filter(Boolean);
+
+    const disliked = pastFeedback
+      .filter(f => f.status === 'skipped')
+      .map(f => {
+        const sug = feedbackSuggestions.find(s => s.id === f.suggestion_id);
+        if (!sug) return null;
+        const ings = (sug.ingredients as { name: string }[]) || [];
+        return ings.slice(0, 2).map(i => i.name).join(', ');
+      })
+      .filter(Boolean);
+
+    if (liked.length > 0) feedbackContext += `\nRepas apprecies: ${liked.join(' | ')}`;
+    if (disliked.length > 0) feedbackContext += `\nRepas a eviter: ${disliked.join(' | ')}`;
+  }
 
   const prompt = `Choisis des repas pour ${span.day_count} jours (${span.start_date} au ${span.end_date}), dejeuner + diner chaque jour.
 ${nbPersons} personnes, max ${establishment.budget_per_meal}€/pers/repas.
@@ -64,7 +96,7 @@ ${feedbackContext}
 Repas disponibles (index|nom|type|proteine|cout):
 ${templateList}
 
-Regles: varier les proteines (pas la meme 2 jours de suite), alterner les couts, minimum ${MIN_COST_PER_PERSON}€/pers par repas. Reponds UNIQUEMENT avec les index choisis en JSON:
+Regles: varier les proteines (pas la meme 2 jours de suite), alterner les couts, minimum ${MIN_COST_PER_PERSON}€/pers par repas. Privilegier les repas apprecies, eviter les repas mal notes. Reponds UNIQUEMENT avec les index choisis en JSON:
 [{"day_index":0,"meal_date":"${span.start_date}","meal_type":"lunch","template_index":5},{"day_index":0,"meal_date":"${span.start_date}","meal_type":"dinner","template_index":12}]`;
 
   const message = await client.messages.create({

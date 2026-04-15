@@ -56,8 +56,9 @@ export default function BriefingPage() {
   const today = new Date().toISOString().split('T')[0];
   const todayMeals = suggestions.filter((s) => s.meal_date === today);
   const todayPrepsMatin = prepTasks.filter((t) => t.scheduled_day === today && t.scheduled_slot === 'matin');
-  const todayPrepsSoir = prepTasks.filter((t) => t.scheduled_day === today && t.scheduled_slot === 'aprem');
-  const hasTodayPreps = todayPrepsMatin.length > 0 || todayPrepsSoir.length > 0;
+  const todayPrepsAprem = prepTasks.filter((t) => t.scheduled_day === today && t.scheduled_slot === 'aprem');
+  const todayPrepsSoir = prepTasks.filter((t) => t.scheduled_day === today && t.scheduled_slot === 'soir');
+  const hasTodayPreps = todayPrepsMatin.length > 0 || todayPrepsAprem.length > 0 || todayPrepsSoir.length > 0;
   const upcoming = suggestions.filter((s) => s.meal_date > today);
 
   return (
@@ -91,6 +92,16 @@ export default function BriefingPage() {
             <div className="mb-2">
               <p className="text-xs text-muted font-data mb-1">matin</p>
               {todayPrepsMatin.map((task) => (
+                <div key={task.id} className="card py-2 mb-1">
+                  <p className="text-sm text-noir">{task.label}</p>
+                </div>
+              ))}
+            </div>
+          )}
+          {todayPrepsAprem.length > 0 && (
+            <div>
+              <p className="text-xs text-muted font-data mb-1">apres-midi</p>
+              {todayPrepsAprem.map((task) => (
                 <div key={task.id} className="card py-2 mb-1">
                   <p className="text-sm text-noir">{task.label}</p>
                 </div>

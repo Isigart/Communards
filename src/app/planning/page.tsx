@@ -227,10 +227,13 @@ export default function PlanningPage() {
         {/* Labels fixes */}
         <div className="absolute left-0 top-0 z-10 bg-papier w-12">
           <div className="h-20 border-b border-bordure"></div>
-          <div className="h-44 flex items-center justify-center border-b border-bordure">
+          <div className="h-36 flex items-center justify-center border-b border-bordure">
             <span className="text-xs font-medium text-muted -rotate-90 whitespace-nowrap">Matin</span>
           </div>
-          <div className="h-44 flex items-center justify-center">
+          <div className="h-36 flex items-center justify-center border-b border-bordure">
+            <span className="text-xs font-medium text-muted -rotate-90 whitespace-nowrap">Aprem</span>
+          </div>
+          <div className="h-36 flex items-center justify-center">
             <span className="text-xs font-medium text-muted -rotate-90 whitespace-nowrap">Soir</span>
           </div>
         </div>
@@ -250,7 +253,8 @@ export default function PlanningPage() {
               const lunch = getMeal(date, 'lunch');
               const dinner = getMeal(date, 'dinner');
               const prepsMatin = getPreps(date, 'matin');
-              const prepsSoir = getPreps(date, 'aprem');
+              const prepsAprem = getPreps(date, 'aprem');
+              const prepsSoir = getPreps(date, 'soir');
 
               return (
                 <div
@@ -273,7 +277,7 @@ export default function PlanningPage() {
                   </div>
 
                   {/* MATIN */}
-                  <div className="h-44 p-1 border-b border-bordure overflow-y-auto">
+                  <div className="h-36 p-1 border-b border-bordure overflow-y-auto">
                     {renderMealCell(lunch, isPast)}
                     {prepsMatin.map((task) => (
                       <div key={task.id} className="bg-noir/5 text-noir border border-bordure rounded px-1.5 py-0.5 text-[11px] font-data mb-0.5 flex items-center justify-between">
@@ -283,8 +287,18 @@ export default function PlanningPage() {
                     ))}
                   </div>
 
+                  {/* APREM */}
+                  <div className="h-36 p-1 border-b border-bordure overflow-y-auto">
+                    {prepsAprem.map((task) => (
+                      <div key={task.id} className="bg-noir/5 text-noir border border-bordure rounded px-1.5 py-0.5 text-[11px] font-data mb-0.5 flex items-center justify-between">
+                        <span className="truncate">{task.label}</span>
+                        {!isPast && <button onClick={() => deleteTask(task.id)} className="text-muted hover:text-rouge ml-1 text-[10px] shrink-0">x</button>}
+                      </div>
+                    ))}
+                  </div>
+
                   {/* SOIR */}
-                  <div className="h-44 p-1 overflow-y-auto">
+                  <div className="h-36 p-1 overflow-y-auto">
                     {renderMealCell(dinner, isPast)}
                     {prepsSoir.map((task) => (
                       <div key={task.id} className="bg-noir/5 text-noir border border-bordure rounded px-1.5 py-0.5 text-[11px] font-data mb-0.5 flex items-center justify-between">
@@ -324,12 +338,13 @@ export default function PlanningPage() {
             ))}
           </select>
           <select
-            className="input text-sm w-24"
+            className="input text-sm w-28"
             value={newTaskSlot}
             onChange={(e) => setNewTaskSlot(e.target.value)}
           >
             <option value="matin">Matin</option>
-            <option value="aprem">Soir</option>
+            <option value="aprem">Apres-midi</option>
+            <option value="soir">Soir</option>
           </select>
           <button
             onClick={addPrepTask}

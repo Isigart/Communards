@@ -54,7 +54,6 @@ export default function ReglagesPage() {
     const primary = suppliers.find((s) => s.is_primary);
     if (primary) {
       setDeliveryDays((primary.delivery_days as number[]) || []);
-      setOrderFrequency((primary.order_frequency as number) || 1);
       setSupplierId(primary.id as string);
     }
     setLoading(false);

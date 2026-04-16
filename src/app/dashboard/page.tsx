@@ -3,12 +3,13 @@
 import { useEffect, useState } from 'react';
 import type { Establishment, Suggestion, SupplySpan } from '@/lib/types';
 import { BUDGET_HCR } from '@/lib/types';
-import { getToken, fetchEstablishment, fetchSuggestions, invalidateSuggestions } from '@/lib/cache';
+import { getToken, fetchEstablishment, fetchSuggestions, fetchSuppliers, invalidateSuggestions } from '@/lib/cache';
 
 export default function DashboardPage() {
   const [establishment, setEstablishment] = useState<Establishment | null>(null);
   const [currentSpan, setCurrentSpan] = useState<SupplySpan | null>(null);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  const [deliveryDays, setDeliveryDays] = useState<number[]>([]);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
 
@@ -21,6 +22,11 @@ export default function DashboardPage() {
     const { span, suggestions: sugs } = await fetchSuggestions();
     setCurrentSpan(span);
     setSuggestions(sugs);
+
+    const suppliers = await fetchSuppliers();
+    const primary = suppliers.find((s) => s.is_primary);
+    if (primary) setDeliveryDays((primary.delivery_days as number[]) || []);
+
     setLoading(false);
   }
 
@@ -85,9 +91,20 @@ export default function DashboardPage() {
   const totalEstimated = suggestions.reduce((sum, s) => sum + (s.estimated_cost || 0), 0);
   const budgetTotal = (establishment?.budget_per_meal || BUDGET_HCR) * (establishment?.employee_count || 0) * suggestions.length;
 
+  const todayDay = new Date().getDay();
+  const isOrderDay = deliveryDays.includes(todayDay);
+
   return (
     <div className="min-h-screen p-4 max-w-lg mx-auto space-y-6">
       <p className="text-sm text-muted">{establishment?.name}</p>
+
+      {/* Alerte commande */}
+      {isOrderDay && (
+        <div className="border border-rouge rounded-xl px-4 py-3 flex items-center gap-3">
+          <span className="font-data text-[10px] uppercase bg-rouge text-papier px-2 py-1 rounded-full">Commande</span>
+          <p className="text-sm text-noir">Aujourd&apos;hui, c&apos;est jour de commande.</p>
+        </div>
+      )}
 
       {/* Budget */}
       <div className="card">

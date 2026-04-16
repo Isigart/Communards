@@ -86,15 +86,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'No primary supplier configured' }, { status: 400 });
   }
 
-  // Generer un span de planning_days jours a partir de demain
+  // Generer un span de planning_days jours a partir d'aujourd'hui
   const planningDays = auth.establishment.planning_days || 7;
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  const endDate = new Date(tomorrow);
+  const startDate = new Date();
+  const endDate = new Date(startDate);
   endDate.setDate(endDate.getDate() + planningDays - 1);
 
   const currentSpanDef = {
-    start_date: formatDate(tomorrow),
+    start_date: formatDate(startDate),
     end_date: formatDate(endDate),
     day_count: planningDays,
   };

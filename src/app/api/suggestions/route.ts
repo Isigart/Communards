@@ -86,16 +86,48 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'No primary supplier configured' }, { status: 400 });
   }
 
-  // Generer un span de planning_days jours a partir d'aujourd'hui
+  // Calcul des spans inter-commandes pour couvrir planning_days jours
+  // Logique: chaque span va du lendemain d'une commande au prochain jour de commande inclus
   const planningDays = auth.establishment.planning_days || 7;
-  const startDate = new Date();
+  const orderDays: number[] = supplier.delivery_days || [];
+
+  if (orderDays.length === 0) {
+    return NextResponse.json({ error: 'No order days configured' }, { status: 400 });
+  }
+
+  // Trouver la prochaine commande
+  const today = new Date();
+  let nextOrderDate = new Date(today);
+  for (let i = 0; i < 7; i++) {
+    if (orderDays.includes(nextOrderDate.getDay())) break;
+    nextOrderDate.setDate(nextOrderDate.getDate() + 1);
+  }
+
+  // Le premier span commence le lendemain de la prochaine commande
+  const startDate = new Date(nextOrderDate);
+  startDate.setDate(startDate.getDate() + 1);
+
+  // On accumule des spans (jour suivant la commande -> prochaine commande inclus)
+  // jusqu'a couvrir au moins planningDays jours
   const endDate = new Date(startDate);
-  endDate.setDate(endDate.getDate() + planningDays - 1);
+  let coveredDays = 1;
+  while (coveredDays < planningDays) {
+    endDate.setDate(endDate.getDate() + 1);
+    coveredDays++;
+    // Si on tombe sur un jour de commande et qu'on a deja assez de jours, on s'arrete
+    if (orderDays.includes(endDate.getDay()) && coveredDays >= planningDays) break;
+  }
+
+  // Continuer jusqu'au prochain jour de commande inclus pour fermer le span proprement
+  while (!orderDays.includes(endDate.getDay())) {
+    endDate.setDate(endDate.getDate() + 1);
+    coveredDays++;
+  }
 
   const currentSpanDef = {
     start_date: formatDate(startDate),
     end_date: formatDate(endDate),
-    day_count: planningDays,
+    day_count: coveredDays,
   };
 
   // If regenerate, clean up old data

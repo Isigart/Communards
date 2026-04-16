@@ -143,17 +143,20 @@ Regles IMPORTANTES:
     const protein = template.protein_type as string;
 
     if (usedInWindow.includes(protein)) {
-      // Chercher un remplacement : meme meal_type, proteine differente, pas deja utilisee
-      const replacement = pool.find((t: Record<string, unknown>, idx: number) =>
-        idx !== sel.template_index &&
-        t.meal_type === sel.meal_type &&
-        !usedInWindow.includes(t.protein_type as string) &&
-        !selections.some((s, j) => j !== i && s.template_index === idx)
-      );
-      if (replacement) {
-        const newIdx = pool.indexOf(replacement);
-        selections[i] = { ...sel, template_index: newIdx };
-        usedInWindow.push(replacement.protein_type as string);
+      // Chercher un remplacement : meme meal_type, proteine differente (tous les templates eligibles)
+      const candidates = pool
+        .map((t: Record<string, unknown>, idx: number) => ({ t, idx }))
+        .filter(({ t, idx }) =>
+          idx !== sel.template_index &&
+          t.meal_type === sel.meal_type &&
+          !usedInWindow.includes(t.protein_type as string)
+        );
+
+      if (candidates.length > 0) {
+        // Prendre un candidat au hasard pour eviter de toujours choisir le meme
+        const pick = candidates[Math.floor(Math.random() * candidates.length)];
+        selections[i] = { ...sel, template_index: pick.idx };
+        usedInWindow.push(pick.t.protein_type as string);
       } else {
         usedInWindow.push(protein);
       }

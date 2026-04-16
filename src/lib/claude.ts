@@ -96,7 +96,12 @@ ${feedbackContext}
 Repas disponibles (index|nom|type|proteine|cout):
 ${templateList}
 
-Regles: varier les proteines (pas la meme 2 jours de suite), alterner les couts, minimum ${MIN_COST_PER_PERSON}€/pers par repas. Privilegier les repas apprecies, eviter les repas mal notes. Reponds UNIQUEMENT avec les index choisis en JSON:
+Regles IMPORTANTES:
+- Proteine differente entre dej et din du meme jour
+- Proteine differente entre din et dej du lendemain
+- Ne jamais utiliser la meme proteine sur 2 repas consecutifs
+- Alterner les couts, minimum ${MIN_COST_PER_PERSON}€/pers par repas
+- Privilegier les repas apprecies, eviter les repas mal notes Reponds UNIQUEMENT avec les index choisis en JSON:
 [{"day_index":0,"meal_date":"${span.start_date}","meal_type":"lunch","template_index":5},{"day_index":0,"meal_date":"${span.start_date}","meal_type":"dinner","template_index":12}]`;
 
   const message = await client.messages.create({
@@ -121,6 +126,43 @@ Regles: varier les proteines (pas la meme 2 jours de suite), alterner les couts,
     } else {
       throw new Error('Failed to parse selections JSON');
     }
+  }
+
+  // Post-traitement: corriger les redondances de proteines
+  // Regle: pas la meme proteine sur 2 repas consecutifs (dej + din du meme jour, ou diner soir + dejeuner lendemain)
+  selections.sort((a, b) => {
+    if (a.meal_date !== b.meal_date) return a.meal_date.localeCompare(b.meal_date);
+    return a.meal_type === 'lunch' ? -1 : 1;
+  });
+
+  const usedInWindow: string[] = []; // proteines des 2 derniers repas
+  for (let i = 0; i < selections.length; i++) {
+    const sel = selections[i];
+    const template = pool[sel.template_index];
+    if (!template) continue;
+    const protein = template.protein_type as string;
+
+    if (usedInWindow.includes(protein)) {
+      // Chercher un remplacement : meme meal_type, proteine differente, pas deja utilisee
+      const replacement = pool.find((t: Record<string, unknown>, idx: number) =>
+        idx !== sel.template_index &&
+        t.meal_type === sel.meal_type &&
+        !usedInWindow.includes(t.protein_type as string) &&
+        !selections.some((s, j) => j !== i && s.template_index === idx)
+      );
+      if (replacement) {
+        const newIdx = pool.indexOf(replacement);
+        selections[i] = { ...sel, template_index: newIdx };
+        usedInWindow.push(replacement.protein_type as string);
+      } else {
+        usedInWindow.push(protein);
+      }
+    } else {
+      usedInWindow.push(protein);
+    }
+
+    // Ne garder que les 2 proteines les plus recentes
+    if (usedInWindow.length > 2) usedInWindow.shift();
   }
 
   // Transformer les selections en suggestions completes

@@ -97,9 +97,8 @@ Repas disponibles (index|nom|type|proteine|cout):
 ${templateList}
 
 Regles IMPORTANTES:
-- Proteine differente entre dej et din du meme jour
-- Proteine differente entre din et dej du lendemain
-- Ne jamais utiliser la meme proteine sur 2 repas consecutifs
+- Ne jamais utiliser la meme proteine sur 4 repas consecutifs (2 jours)
+- Maximiser la variete des proteines sur tout le span
 - Alterner les couts, minimum ${MIN_COST_PER_PERSON}€/pers par repas
 - Privilegier les repas apprecies, eviter les repas mal notes Reponds UNIQUEMENT avec les index choisis en JSON:
 [{"day_index":0,"meal_date":"${span.start_date}","meal_type":"lunch","template_index":5},{"day_index":0,"meal_date":"${span.start_date}","meal_type":"dinner","template_index":12}]`;
@@ -164,8 +163,8 @@ Regles IMPORTANTES:
       usedInWindow.push(protein);
     }
 
-    // Ne garder que les 2 proteines les plus recentes
-    if (usedInWindow.length > 2) usedInWindow.shift();
+    // Ne garder que les 4 proteines les plus recentes (2 jours complets)
+    if (usedInWindow.length > 4) usedInWindow.shift();
   }
 
   // Transformer les selections en suggestions completes

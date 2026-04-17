@@ -38,12 +38,30 @@ export async function generateSuggestions(input: GenerateInput): Promise<Omit<Su
     : (await supabase.from('meal_templates').select('*')).data || [];
 
   // Filtrer les repas en dessous du plancher
-  const pool = allTemplates.filter((t: Record<string, unknown>) =>
+  let pool = allTemplates.filter((t: Record<string, unknown>) =>
     (t.estimated_cost_per_person as number) >= MIN_COST_PER_PERSON
   );
 
+  // Filtrer selon les contraintes alimentaires
+  const constraints: string[] = establishment.dietary_constraints || [];
+  if (constraints.length > 0) {
+    pool = pool.filter((t: Record<string, unknown>) => {
+      const tags = (t.tags as string[]) || [];
+      // vegetarien : doit etre vegetarien
+      if (constraints.includes('vegetarien') && !tags.includes('vegetarien')) return false;
+      // sans-porc : doit etre marque sans-porc OU ne pas avoir porc comme proteine
+      if (constraints.includes('sans-porc')) {
+        if (t.protein_type === 'porc') return false;
+        if (!tags.includes('sans-porc') && !tags.includes('halal') && !tags.includes('vegetarien')) return false;
+      }
+      // sans-gluten : doit etre marque sans-gluten
+      if (constraints.includes('sans-gluten') && !tags.includes('sans-gluten')) return false;
+      return true;
+    });
+  }
+
   if (pool.length === 0) {
-    throw new Error('No meal templates available above minimum cost');
+    throw new Error('No meal templates available with current constraints');
   }
 
   // Construire la liste compacte des repas disponibles

@@ -89,19 +89,41 @@ export async function generateSuggestions(input: GenerateInput): Promise<Omit<Su
     if (disliked.length > 0) feedbackContext += `\nRepas a eviter: ${disliked.join(' | ')}`;
   }
 
-  const prompt = `Choisis des repas pour ${span.day_count} jours (${span.start_date} au ${span.end_date}), dejeuner + diner chaque jour.
+  // Determiner les services a generer
+  const services = (establishment.services && establishment.services.length > 0)
+    ? establishment.services
+    : ['lunch', 'dinner'];
+  const servicesLabel = services.length === 2
+    ? 'dejeuner + diner chaque jour'
+    : services[0] === 'lunch' ? 'dejeuner uniquement' : 'diner uniquement';
+
+  // Filtrer le pool sur les meal_type demandes
+  const filteredPool = pool.filter((t: Record<string, unknown>) =>
+    services.includes(t.meal_type as string)
+  );
+  const filteredTemplateList = filteredPool.map((t: Record<string, unknown>, i: number) =>
+    `${i}|${t.name}|${t.meal_type}|${t.protein_type}|${(t.estimated_cost_per_person as number)?.toFixed(2)}€`
+  ).join('\n');
+
+  const exampleSelections = services.map((s) =>
+    `{"day_index":0,"meal_date":"${span.start_date}","meal_type":"${s}","template_index":${services.indexOf(s) * 5}}`
+  ).join(',');
+
+  const prompt = `Choisis des repas pour ${span.day_count} jours (${span.start_date} au ${span.end_date}), ${servicesLabel}.
 ${nbPersons} personnes, max ${establishment.budget_per_meal}€/pers/repas.
 ${feedbackContext}
 
 Repas disponibles (index|nom|type|proteine|cout):
-${templateList}
+${filteredTemplateList}
 
 Regles IMPORTANTES:
+- Ne genere que les services demandes (${services.join(', ')})
 - Ne jamais utiliser la meme proteine sur 4 repas consecutifs (2 jours)
 - Maximiser la variete des proteines sur tout le span
 - Alterner les couts, minimum ${MIN_COST_PER_PERSON}€/pers par repas
-- Privilegier les repas apprecies, eviter les repas mal notes Reponds UNIQUEMENT avec les index choisis en JSON:
-[{"day_index":0,"meal_date":"${span.start_date}","meal_type":"lunch","template_index":5},{"day_index":0,"meal_date":"${span.start_date}","meal_type":"dinner","template_index":12}]`;
+- Privilegier les repas apprecies, eviter les repas mal notes
+Reponds UNIQUEMENT avec les index choisis en JSON:
+[${exampleSelections}]`;
 
   const message = await client.messages.create({
     model: 'claude-haiku-4-5-20251001',
@@ -137,13 +159,13 @@ Regles IMPORTANTES:
   const usedInWindow: string[] = []; // proteines des 2 derniers repas
   for (let i = 0; i < selections.length; i++) {
     const sel = selections[i];
-    const template = pool[sel.template_index];
+    const template = filteredPool[sel.template_index];
     if (!template) continue;
     const protein = template.protein_type as string;
 
     if (usedInWindow.includes(protein)) {
       // Chercher un remplacement : meme meal_type, proteine differente (tous les templates eligibles)
-      const candidates = pool
+      const candidates = filteredPool
         .map((t: Record<string, unknown>, idx: number) => ({ t, idx }))
         .filter(({ t, idx }) =>
           idx !== sel.template_index &&
@@ -168,8 +190,10 @@ Regles IMPORTANTES:
   }
 
   // Transformer les selections en suggestions completes
-  return selections.map((sel) => {
-    const template = pool[sel.template_index];
+  return selections
+    .filter((sel) => services.includes(sel.meal_type))
+    .map((sel) => {
+    const template = filteredPool[sel.template_index];
     if (!template) return null;
 
     // Multiplier les quantites par le nombre de personnes

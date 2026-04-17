@@ -222,6 +222,32 @@ export default function ReglagesPage() {
         <input type="text" className="input" placeholder="Autre contrainte..." value={constraintOther} onChange={(e) => setConstraintOther(e.target.value)} />
       </section>
 
+      <section className="card space-y-3">
+        <h2 className="font-titre text-sm text-noir">Compte</h2>
+        <div className="flex gap-3 text-xs">
+          <a href="/confidentialite" className="text-muted underline">Confidentialite</a>
+          <a href="/mentions-legales" className="text-muted underline">Mentions legales</a>
+        </div>
+        <button
+          onClick={async () => {
+            if (!confirm('Supprimer definitivement votre compte et toutes vos donnees ? Cette action est irreversible.')) return;
+            if (!token) return;
+            const res = await fetch('/api/account', {
+              method: 'DELETE',
+              headers: { Authorization: `Bearer ${token}` },
+            });
+            if (res.ok) {
+              window.location.href = '/';
+            } else {
+              alert('Quelque chose a cloche. Reessaie.');
+            }
+          }}
+          className="text-xs text-rouge underline"
+        >
+          Supprimer mon compte et toutes mes donnees
+        </button>
+      </section>
+
       <div className="fixed bottom-0 left-0 right-0 bg-papier border-t border-bordure p-4">
         <div className="max-w-lg mx-auto">
           <button onClick={handleSave} disabled={saving} className="btn-rouge w-full">

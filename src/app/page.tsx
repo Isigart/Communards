@@ -85,6 +85,11 @@ export default function Home() {
         <p className="text-center text-xs text-muted">
           Premiere visite ? Un compte est cree automatiquement.
         </p>
+
+        <div className="flex justify-center gap-4 text-xs text-muted">
+          <a href="/confidentialite" className="underline">Confidentialite</a>
+          <a href="/mentions-legales" className="underline">Mentions legales</a>
+        </div>
       </div>
     </main>
   );

@@ -144,6 +144,8 @@ Regles IMPORTANTES:
 - Ne genere que les services demandes (${services.join(', ')})
 - Ne jamais utiliser la meme proteine sur 4 repas consecutifs (2 jours)
 - Maximiser la variete des proteines sur tout le span
+- Varier les feculents aussi (eviter riz tous les jours — alterner riz/pates/pommes de terre/semoule/lentilles/quinoa)
+- Inclure au moins 2 repas vegetariens par semaine (ils couvrent toutes les contraintes : vegetarien, sans-porc, halal)
 - Alterner les couts, minimum ${MIN_COST_PER_PERSON}€/pers par repas
 - Privilegier les repas apprecies, eviter les repas mal notes
 Reponds UNIQUEMENT avec les index choisis en JSON:

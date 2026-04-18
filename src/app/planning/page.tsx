@@ -111,18 +111,6 @@ export default function PlanningPage() {
 
   const today = new Date().toISOString().split('T')[0];
 
-  const allDates: string[] = [];
-  if (span) {
-    const start = new Date(span.start_date + 'T00:00:00');
-    start.setDate(start.getDate() - 2);
-    const end = new Date(span.end_date + 'T00:00:00');
-    end.setDate(end.getDate() + 1);
-    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-      allDates.push(d.toISOString().split('T')[0]);
-    }
-  }
-
-  // Jours du span uniquement (pour le select)
   const spanDates: string[] = [];
   if (span) {
     const start = new Date(span.start_date + 'T00:00:00');
@@ -247,11 +235,10 @@ export default function PlanningPage() {
           className="overflow-x-auto pl-12"
           style={{ scrollSnapType: 'x mandatory', WebkitOverflowScrolling: 'touch' }}
         >
-          <div className="flex" style={{ width: allDates.length * COL_WIDTH }}>
-            {allDates.map((date) => {
+          <div className="flex" style={{ width: spanDates.length * COL_WIDTH }}>
+            {spanDates.map((date) => {
               const isPast = date < today;
               const isToday = date === today;
-              const isOutsideSpan = span ? (date < span.start_date || date > span.end_date) : false;
               const { day, num } = formatDay(date);
               const lunch = getMeal(date, 'lunch');
               const dinner = getMeal(date, 'dinner');
@@ -263,7 +250,7 @@ export default function PlanningPage() {
                 <div
                   key={date}
                   data-today={isToday || undefined}
-                  className={`flex-shrink-0 border-r border-bordure ${isOutsideSpan ? 'opacity-25' : isPast ? 'opacity-40' : ''}`}
+                  className={`flex-shrink-0 border-r border-bordure ${isPast && !isToday ? 'opacity-40' : ''}`}
                   style={{ width: COL_WIDTH, scrollSnapAlign: 'start' }}
                 >
                   {/* Header jour */}

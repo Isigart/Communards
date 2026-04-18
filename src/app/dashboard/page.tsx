@@ -12,6 +12,7 @@ export default function DashboardPage() {
   const [deliveryDays, setDeliveryDays] = useState<number[]>([]);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
+  const [genError, setGenError] = useState<string | null>(null);
 
   useEffect(() => { loadDashboard(); }, []);
 
@@ -47,14 +48,20 @@ export default function DashboardPage() {
 
   async function generateSuggestions() {
     setGenerating(true);
+    setGenError(null);
     const token = await getToken();
-    if (!token) return;
+    if (!token) { setGenerating(false); return; }
 
     const res = await fetch('/api/suggestions', {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}` },
     });
-    if (!res.ok) { setGenerating(false); return; }
+    if (!res.ok) {
+      const body = await res.text();
+      setGenError(`Span: ${res.status} — ${body.slice(0, 200)}`);
+      setGenerating(false);
+      return;
+    }
     const data = await res.json();
     setCurrentSpan(data.span);
 
@@ -72,10 +79,21 @@ export default function DashboardPage() {
       body: JSON.stringify({ span_id: data.span.id }),
     });
     if (genRes.ok) {
+      const result = await genRes.json();
+      if (result.count === 0) {
+        setGenError('Claude a repondu mais 0 repas generes. Verifie les templates.');
+        setGenerating(false);
+        return;
+      }
       invalidateSuggestions();
       const fresh = await fetchSuggestions(true);
       setCurrentSpan(fresh.span);
       setSuggestions(fresh.suggestions);
+    } else {
+      const body = await genRes.text();
+      let msg = body;
+      try { msg = JSON.parse(body).error || body; } catch { /* skip */ }
+      setGenError(`Generation: ${genRes.status} — ${msg.slice(0, 400)}`);
     }
     setGenerating(false);
   }
@@ -157,6 +175,13 @@ export default function DashboardPage() {
         <button onClick={generateSuggestions} disabled={generating} className="btn-rouge w-full">
           {generating ? 'on prepare le planning...' : 'generer les suggestions →'}
         </button>
+      )}
+
+      {genError && (
+        <div className="border border-rouge rounded-xl px-4 py-3 bg-rouge/5">
+          <p className="text-xs font-data uppercase text-rouge mb-1">Erreur generation</p>
+          <p className="text-sm text-noir break-words">{genError}</p>
+        </div>
       )}
 
       {/* Today's meals */}

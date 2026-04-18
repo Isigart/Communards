@@ -32,36 +32,40 @@ export async function generateSuggestions(input: GenerateInput): Promise<Omit<Su
 
   const MIN_COST_PER_PERSON = 3.50;
 
-  // Si pas de templates, fallback sur tous
-  const allTemplates = templates && templates.length > 0
-    ? templates
-    : (await supabase.from('meal_templates').select('*')).data || [];
+  // Si pas de templates pour la saison, fallback sur tous
+  const { data: allTemplatesRaw } = await supabase.from('meal_templates').select('*');
+  const totalCount = allTemplatesRaw?.length || 0;
+  const allTemplates = templates && templates.length > 0 ? templates : (allTemplatesRaw || []);
+
+  if (allTemplates.length === 0) {
+    throw new Error(`No meal templates in database (total: ${totalCount}). Ajoute des templates dans la table meal_templates.`);
+  }
 
   // Filtrer les repas en dessous du plancher
-  let pool = allTemplates.filter((t: Record<string, unknown>) =>
+  const afterCost = allTemplates.filter((t: Record<string, unknown>) =>
     (t.estimated_cost_per_person as number) >= MIN_COST_PER_PERSON
   );
+  // Si le filtre de cout vide tout, on garde tout (templates probablement mal price)
+  let pool = afterCost.length > 0 ? afterCost : allTemplates;
 
   // Filtrer selon les contraintes alimentaires
   const constraints: string[] = establishment.dietary_constraints || [];
+  const beforeDietary = pool.length;
   if (constraints.length > 0) {
     pool = pool.filter((t: Record<string, unknown>) => {
       const tags = (t.tags as string[]) || [];
-      // vegetarien : doit etre vegetarien
       if (constraints.includes('vegetarien') && !tags.includes('vegetarien')) return false;
-      // sans-porc : doit etre marque sans-porc OU ne pas avoir porc comme proteine
       if (constraints.includes('sans-porc')) {
         if (t.protein_type === 'porc') return false;
         if (!tags.includes('sans-porc') && !tags.includes('halal') && !tags.includes('vegetarien')) return false;
       }
-      // sans-gluten : doit etre marque sans-gluten
       if (constraints.includes('sans-gluten') && !tags.includes('sans-gluten')) return false;
       return true;
     });
   }
 
   if (pool.length === 0) {
-    throw new Error('No meal templates available with current constraints');
+    throw new Error(`Pool vide apres contraintes [${constraints.join(', ')}]. ${beforeDietary} templates avant filtrage dietetique, total en base: ${totalCount}, saison: ${season}.`);
   }
 
   // Construire la liste compacte des repas disponibles
@@ -119,6 +123,11 @@ export async function generateSuggestions(input: GenerateInput): Promise<Omit<Su
   const filteredPool = pool.filter((t: Record<string, unknown>) =>
     services.includes(t.meal_type as string)
   );
+
+  if (filteredPool.length === 0) {
+    throw new Error(`Aucun template pour les services [${services.join(', ')}]. Pool avant: ${pool.length}. Verifie les meal_type dans meal_templates.`);
+  }
+
   const filteredTemplateList = filteredPool.map((t: Record<string, unknown>, i: number) =>
     `${i}|${t.name}|${t.meal_type}|${t.protein_type}|${(t.estimated_cost_per_person as number)?.toFixed(2)}€`
   ).join('\n');

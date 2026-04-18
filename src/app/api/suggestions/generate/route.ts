@@ -50,11 +50,18 @@ export async function POST(req: NextRequest) {
     .limit(20);
 
   // Generate via Claude
-  const generated = await generateSuggestions({
-    establishment: auth.establishment,
-    span: span as SupplySpan,
-    pastFeedback: feedback || [],
-  });
+  let generated;
+  try {
+    generated = await generateSuggestions({
+      establishment: auth.establishment,
+      span: span as SupplySpan,
+      pastFeedback: feedback || [],
+    });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'Unknown error';
+    console.error('generateSuggestions failed:', msg);
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
 
   // Store
   const rows = generated.map((s) => ({

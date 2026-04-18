@@ -10,27 +10,24 @@ interface GenerateInput {
   pastFeedback: Feedback[];
 }
 
-function getCurrentSeason(): string {
-  const month = new Date().getMonth() + 1;
-  if (month >= 3 && month <= 5) return 'printemps';
-  if (month >= 6 && month <= 8) return 'ete';
-  if (month >= 9 && month <= 11) return 'automne';
-  return 'hiver';
+function getCurrentMonth(): string {
+  const months = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
+  return months[new Date().getMonth()];
 }
 
 export async function generateSuggestions(input: GenerateInput): Promise<Omit<Suggestion, 'id' | 'span_id' | 'establishment_id' | 'created_at'>[]> {
   const { establishment, span, pastFeedback } = input;
   const nbPersons = establishment.employee_count;
-  const season = getCurrentSeason();
+  const currentMonth = getCurrentMonth();
 
-  // Charger les templates de la saison
+  // Charger les templates du mois courant (la colonne 'season' contient les mois)
   const supabase = createServerClient();
   const { data: templates } = await supabase
     .from('meal_templates')
     .select('*')
-    .contains('season', [season]);
+    .contains('season', [currentMonth]);
 
-  const MIN_COST_PER_PERSON = 3.50;
+  const MIN_COST_PER_PERSON = 2.00;
 
   // Si pas de templates pour la saison, fallback sur tous
   const { data: allTemplatesRaw } = await supabase.from('meal_templates').select('*');
@@ -65,7 +62,7 @@ export async function generateSuggestions(input: GenerateInput): Promise<Omit<Su
   }
 
   if (pool.length === 0) {
-    throw new Error(`Pool vide apres contraintes [${constraints.join(', ')}]. ${beforeDietary} templates avant filtrage dietetique, total en base: ${totalCount}, saison: ${season}.`);
+    throw new Error(`Pool vide apres contraintes [${constraints.join(', ')}]. ${beforeDietary} templates avant filtrage dietetique, total en base: ${totalCount}, mois: ${currentMonth}.`);
   }
 
   // Construire la liste compacte des repas disponibles

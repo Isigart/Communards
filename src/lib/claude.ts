@@ -22,7 +22,7 @@ export async function generateSuggestions(input: GenerateInput): Promise<Omit<Su
 
   // Charger les templates du mois courant (la colonne 'season' contient les mois)
   const supabase = createServerClient();
-  const { data: templates } = await supabase
+  const { data: templates, error: seasonErr } = await supabase
     .from('meal_templates')
     .select('*')
     .contains('season', [currentMonth]);
@@ -30,12 +30,14 @@ export async function generateSuggestions(input: GenerateInput): Promise<Omit<Su
   const MIN_COST_PER_PERSON = 2.00;
 
   // Si pas de templates pour la saison, fallback sur tous
-  const { data: allTemplatesRaw } = await supabase.from('meal_templates').select('*');
+  const { data: allTemplatesRaw, error: allErr } = await supabase.from('meal_templates').select('*');
   const totalCount = allTemplatesRaw?.length || 0;
   const allTemplates = templates && templates.length > 0 ? templates : (allTemplatesRaw || []);
 
   if (allTemplates.length === 0) {
-    throw new Error(`No meal templates in database (total: ${totalCount}). Ajoute des templates dans la table meal_templates.`);
+    const errInfo = allErr ? ` | allErr: ${allErr.message} (${allErr.code})` : '';
+    const seasonInfo = seasonErr ? ` | seasonErr: ${seasonErr.message}` : '';
+    throw new Error(`No meal templates in database (total: ${totalCount}, month: ${currentMonth}).${errInfo}${seasonInfo}`);
   }
 
   // Filtrer les repas en dessous du plancher

@@ -118,17 +118,11 @@ export async function generateSuggestions(input: GenerateInput): Promise<Omit<Su
     ? 'dejeuner + diner chaque jour'
     : services[0] === 'lunch' ? 'dejeuner uniquement' : 'diner uniquement';
 
-  // Filtrer le pool sur les meal_type demandes
-  const filteredPool = pool.filter((t: Record<string, unknown>) =>
-    services.includes(t.meal_type as string)
-  );
-
-  if (filteredPool.length === 0) {
-    throw new Error(`Aucun template pour les services [${services.join(', ')}]. Pool avant: ${pool.length}. Verifie les meal_type dans meal_templates.`);
-  }
+  // Les templates ne sont plus separes par meal_type — on utilise tout le pool
+  const filteredPool = pool;
 
   const filteredTemplateList = filteredPool.map((t: Record<string, unknown>, i: number) =>
-    `${i}|${t.name}|${t.meal_type}|${t.protein_type}|${(t.estimated_cost_per_person as number)?.toFixed(2)}€`
+    `${i}|${t.name}|${t.protein_type}|${(t.estimated_cost_per_person as number)?.toFixed(2)}€`
   ).join('\n');
 
   const exampleSelections = services.map((s) =>
@@ -139,7 +133,7 @@ export async function generateSuggestions(input: GenerateInput): Promise<Omit<Su
 ${nbPersons} personnes, max ${establishment.budget_per_meal}€/pers/repas.
 ${feedbackContext}
 
-Repas disponibles (index|nom|type|proteine|cout):
+Repas disponibles (index|nom|proteine|cout):
 ${filteredTemplateList}
 
 Regles IMPORTANTES:
@@ -192,12 +186,11 @@ Reponds UNIQUEMENT avec les index choisis en JSON:
     const protein = template.protein_type as string;
 
     if (usedInWindow.includes(protein)) {
-      // Chercher un remplacement : meme meal_type, proteine differente (tous les templates eligibles)
+      // Chercher un remplacement : proteine differente (tous les templates eligibles)
       const candidates = filteredPool
         .map((t: Record<string, unknown>, idx: number) => ({ t, idx }))
-        .filter(({ t, idx }) =>
+        .filter(({ idx, t }) =>
           idx !== sel.template_index &&
-          t.meal_type === sel.meal_type &&
           !usedInWindow.includes(t.protein_type as string)
         );
 

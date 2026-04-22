@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import type { Suggestion, SupplySpan } from '@/lib/types';
-import { getToken, fetchSuggestions, fetchSuppliers, fetchPrepTasks, invalidatePrepTasks, invalidateSuggestions } from '@/lib/cache';
+import { getToken, fetchEstablishment, fetchSuggestions, fetchSuppliers, fetchPrepTasks, invalidatePrepTasks, invalidateSuggestions } from '@/lib/cache';
 
 interface PrepTask {
   id: string;
@@ -18,6 +18,7 @@ export default function PlanningPage() {
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [prepTasks, setPrepTasks] = useState<PrepTask[]>([]);
   const [deliveryDays, setDeliveryDays] = useState<number[]>([]);
+  const [employeeCount, setEmployeeCount] = useState(1);
   const [loading, setLoading] = useState(true);
   const [token, setToken] = useState<string | null>(null);
 
@@ -46,10 +47,11 @@ export default function PlanningPage() {
     if (!t) return;
     setToken(t);
 
-    const [sugData, suppliers, preps] = await Promise.all([
+    const [sugData, suppliers, preps, est] = await Promise.all([
       fetchSuggestions(),
       fetchSuppliers(),
       fetchPrepTasks(true), // force refresh pour avoir les derniers placements
+      fetchEstablishment(),
     ]);
 
     setSpan(sugData.span);
@@ -57,6 +59,7 @@ export default function PlanningPage() {
     setPrepTasks(preps as unknown as PrepTask[]);
     const primary = suppliers.find((s) => s.is_primary);
     if (primary) setDeliveryDays((primary.delivery_days as number[]) || []);
+    if (est?.employee_count) setEmployeeCount(est.employee_count);
     setLoading(false);
   }
 
@@ -178,8 +181,8 @@ export default function PlanningPage() {
             <span className="font-data text-muted ml-1">{ing.quantity}{ing.unit}</span>
           </div>
         ))}
-        {meal.estimated_cost && (
-          <p className="font-data text-[10px] text-muted mt-1">~{meal.estimated_cost} EUR</p>
+        {meal.estimated_cost && employeeCount > 0 && (
+          <p className="font-data text-[10px] text-muted mt-1">~{(meal.estimated_cost / employeeCount).toFixed(2)} EUR/pers</p>
         )}
         {meal.notes && !isEditing && (
           <p className="text-[10px] text-noir/60 italic mt-1 cursor-pointer" onClick={() => { setEditingNote(meal.id); setDraftNote(meal.notes || ''); }}>

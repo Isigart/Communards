@@ -182,6 +182,11 @@ export default function DashboardPage() {
                     </p>
                   ))}
                 </div>
+                {s.estimated_cost && establishment?.employee_count && (
+                  <p className="text-xs font-data text-muted mt-2">
+                    ~{(s.estimated_cost / establishment.employee_count).toFixed(2)} EUR/pers
+                  </p>
+                )}
                 {s.notes && (
                   <p className="text-xs text-noir/60 mt-2 italic">{s.notes}</p>
                 )}

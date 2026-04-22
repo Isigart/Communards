@@ -28,22 +28,13 @@ export default function DashboardPage() {
     const primary = suppliers.find((s) => s.is_primary);
     if (primary) setDeliveryDays((primary.delivery_days as number[]) || []);
 
-    // Auto-regenerer si le span est expire
-    const today = new Date().toISOString().split('T')[0];
-    if (span && span.end_date < today) {
-      setGenerating(true);
-      await generateSuggestions();
-      return;
-    }
-
-    // Premiere visite sans span : generer automatiquement
-    if (!span && est) {
-      setGenerating(true);
-      await generateSuggestions();
-      return;
-    }
-
     setLoading(false);
+
+    // Auto-regenerer si le span est expire ou inexistant
+    const today = new Date().toISOString().split('T')[0];
+    if ((span && span.end_date < today) || (!span && est)) {
+      await generateSuggestions();
+    }
   }
 
   async function generateSuggestions() {

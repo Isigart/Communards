@@ -119,7 +119,8 @@ export async function generateSuggestions(input: GenerateInput): Promise<Omit<Su
     : services[0] === 'lunch' ? 'dejeuner uniquement' : 'diner uniquement';
 
   // Les templates ne sont plus separes par meal_type — on utilise tout le pool
-  const filteredPool = pool;
+  // Melange aleatoire pour eviter que Claude suive l'ordre d'insertion
+  const filteredPool = [...pool].sort(() => Math.random() - 0.5);
 
   const filteredTemplateList = filteredPool.map((t: Record<string, unknown>, i: number) =>
     `${i}|${t.name}|${t.protein_type}|${(t.estimated_cost_per_person as number)?.toFixed(2)}€`
@@ -140,16 +141,18 @@ Regles IMPORTANTES:
 - Ne genere que les services demandes (${services.join(', ')})
 - Ne jamais utiliser la meme proteine sur 4 repas consecutifs (2 jours)
 - Maximiser la variete des proteines sur tout le span
+- La premiere semaine doit couvrir AU MOINS 5 proteines differentes (ne pas piocher toujours les memes au debut)
 - Varier les feculents : un meme feculent (riz, pates, pommes de terre, semoule, lentilles, quinoa, boulgour...) max 2 fois par semaine
 - Inclure au moins 2 repas vegetariens par semaine (ils couvrent toutes les contraintes : vegetarien, sans-porc, halal)
 - Alterner les couts, minimum ${MIN_COST_PER_PERSON}€/pers par repas
 - Privilegier les repas apprecies, eviter les repas mal notes
+- Coherence : eviter de mettre deux plats "lourds" consecutifs (ex: blanquette midi + pot-au-feu soir). Alterner plat chaud/plat froid quand possible
 Reponds UNIQUEMENT avec les index choisis en JSON:
 [${exampleSelections}]`;
 
   const message = await client.messages.create({
     model: 'claude-haiku-4-5-20251001',
-    max_tokens: 1024,
+    max_tokens: 4096,
     messages: [{ role: 'user', content: prompt }],
   });
 

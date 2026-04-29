@@ -11,8 +11,18 @@ interface GenerateInput {
 }
 
 function getCurrentMonth(): string {
-  const months = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
+  // v3: schema utilise les mois sans accents (matches saison TEXT[] CHECK constraint)
+  const months = ['janvier', 'fevrier', 'mars', 'avril', 'mai', 'juin', 'juillet', 'aout', 'septembre', 'octobre', 'novembre', 'decembre'];
   return months[new Date().getMonth()];
+}
+
+function getCurrentSaison(): string {
+  // Saison large pour matcher saison: ['ete'] / ['hiver'] etc.
+  const m = new Date().getMonth() + 1;
+  if (m === 12 || m <= 2) return 'hiver';
+  if (m <= 5) return 'printemps';
+  if (m <= 8) return 'ete';
+  return 'automne';
 }
 
 export async function generateSuggestions(input: GenerateInput): Promise<Omit<Suggestion, 'id' | 'span_id' | 'establishment_id' | 'created_at'>[]> {
@@ -20,12 +30,15 @@ export async function generateSuggestions(input: GenerateInput): Promise<Omit<Su
   const nbPersons = establishment.employee_count;
   const currentMonth = getCurrentMonth();
 
-  // Charger les templates du mois courant (la colonne 'season' contient les mois)
+  // v3: charger templates du mois courant via colonne 'saison' TEXT[]
+  // saison contient soit ['toutes'] soit ['printemps','ete',...] soit ['mai','juin',...]
   const supabase = createServerClient();
-  const { data: templates, error: seasonErr } = await supabase
+  const currentSaison = getCurrentSaison();
+  const { data: templatesMonth, error: seasonErr } = await supabase
     .from('meal_templates')
     .select('*')
-    .contains('season', [currentMonth]);
+    .or(`saison.cs.{${currentMonth}},saison.cs.{${currentSaison}},saison.cs.{toutes}`);
+  const templates = templatesMonth;
 
   const MIN_COST_PER_PERSON = 2.00;
 
@@ -53,12 +66,14 @@ export async function generateSuggestions(input: GenerateInput): Promise<Omit<Su
   if (constraints.length > 0) {
     pool = pool.filter((t: Record<string, unknown>) => {
       const tags = (t.tags as string[]) || [];
-      if (constraints.includes('vegetarien') && !tags.includes('vegetarien')) return false;
-      if (constraints.includes('sans-porc')) {
-        if (t.protein_type === 'porc') return false;
-        if (!tags.includes('sans-porc') && !tags.includes('halal') && !tags.includes('vegetarien')) return false;
-      }
-      if (constraints.includes('sans-gluten') && !tags.includes('sans-gluten')) return false;
+      const containsPorc = (t.contains_porc as boolean) || false;
+      const containsGluten = (t.contains_gluten as boolean) || false;
+      const isVege = (t.is_vegetarien as boolean) || false;
+      if (constraints.includes('vegetarien') && !isVege) return false;
+      if (constraints.includes('sans-porc') && containsPorc) return false;
+      if (constraints.includes('halal') && !(t.halal_compatible as boolean)) return false;
+      if (constraints.includes('sans-gluten') && containsGluten) return false;
+      if (constraints.includes('sans-lactose') && (t.contains_lactose as boolean)) return false;
       return true;
     });
   }
@@ -69,7 +84,7 @@ export async function generateSuggestions(input: GenerateInput): Promise<Omit<Su
 
   // Construire la liste compacte des repas disponibles
   const templateList = pool.map((t: Record<string, unknown>, i: number) =>
-    `${i}|${t.name}|${t.meal_type}|${t.protein_type}|${(t.estimated_cost_per_person as number)?.toFixed(2)}€`
+    `${i}|${t.name}|${t.categorie_gemrcn}|${(t.estimated_cost_per_person as number)?.toFixed(2)}€`
   ).join('\n');
 
   // Construire le contexte feedback avec les noms des repas
@@ -123,7 +138,7 @@ export async function generateSuggestions(input: GenerateInput): Promise<Omit<Su
   const filteredPool = [...pool].sort(() => Math.random() - 0.5);
 
   const filteredTemplateList = filteredPool.map((t: Record<string, unknown>, i: number) =>
-    `${i}|${t.name}|${t.protein_type}|${(t.estimated_cost_per_person as number)?.toFixed(2)}€`
+    `${i}|${t.name}|${t.categorie_gemrcn}|${(t.estimated_cost_per_person as number)?.toFixed(2)}€`
   ).join('\n');
 
   const exampleSelections = services.map((s) =>
@@ -134,7 +149,7 @@ export async function generateSuggestions(input: GenerateInput): Promise<Omit<Su
 ${nbPersons} personnes, max ${establishment.budget_per_meal}€/pers/repas.
 ${feedbackContext}
 
-Repas disponibles (index|nom|proteine|cout):
+Repas disponibles (index|nom|categorie_gemrcn|cout):
 ${filteredTemplateList}
 
 Regles IMPORTANTES:
@@ -186,22 +201,21 @@ Reponds UNIQUEMENT avec les index choisis en JSON:
     const sel = selections[i];
     const template = filteredPool[sel.template_index];
     if (!template) continue;
-    const protein = template.protein_type as string;
+    const protein = template.categorie_gemrcn as string;
 
     if (usedInWindow.includes(protein)) {
-      // Chercher un remplacement : proteine differente (tous les templates eligibles)
+      // Chercher un remplacement : categorie_gemrcn differente
       const candidates = filteredPool
         .map((t: Record<string, unknown>, idx: number) => ({ t, idx }))
         .filter(({ idx, t }) =>
           idx !== sel.template_index &&
-          !usedInWindow.includes(t.protein_type as string)
+          !usedInWindow.includes(t.categorie_gemrcn as string)
         );
 
       if (candidates.length > 0) {
-        // Prendre un candidat au hasard pour eviter de toujours choisir le meme
         const pick = candidates[Math.floor(Math.random() * candidates.length)];
         selections[i] = { ...sel, template_index: pick.idx };
-        usedInWindow.push(pick.t.protein_type as string);
+        usedInWindow.push(pick.t.categorie_gemrcn as string);
       } else {
         usedInWindow.push(protein);
       }
@@ -220,11 +234,12 @@ Reponds UNIQUEMENT avec les index choisis en JSON:
     const template = filteredPool[sel.template_index];
     if (!template) return null;
 
-    // Multiplier les quantites par le nombre de personnes
-    const ingredients = ((template.ingredients as Record<string, string>[]) || []).map((ing) => ({
+    // v3: ingredients ont quantity_kg, on convertit vers le format suggestion (quantity + unit)
+    type V3Ingredient = { name: string; quantity_kg: number; price_ht_kg: number; category: string };
+    const ingredients = ((template.ingredients as V3Ingredient[]) || []).map((ing) => ({
       name: ing.name,
-      quantity: (parseFloat(ing.quantity) * nbPersons).toFixed(1),
-      unit: ing.unit,
+      quantity: (ing.quantity_kg * nbPersons).toFixed(2),
+      unit: 'kg',
       category: ing.category,
     }));
 

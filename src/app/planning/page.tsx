@@ -159,7 +159,7 @@ export default function PlanningPage() {
           <p className="text-[11px] text-noir leading-snug">
             <span className="font-data text-muted">{meal.meal_type === 'lunch' ? 'dej' : 'din'}</span>
             {' '}
-            {meal.ingredients.slice(0, 3).map((ing) => shortName(ing.name)).join(', ')}
+            {meal.ingredients.map((ing) => shortName(ing.name)).join(', ')}
           </p>
           {meal.notes
             ? <p className="text-[10px] text-noir/50 italic truncate">{meal.notes}</p>

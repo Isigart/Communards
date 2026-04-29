@@ -13,6 +13,14 @@ interface PrepTask {
   done: boolean;
 }
 
+// Mapping catégorie ingrédient → pastille colorée P/F/L/D
+const CATEGORY_BADGE: Record<string, { bg: string; fg: string; label: string }> = {
+  proteine: { bg: '#FAECE7', fg: '#993C1D', label: 'P' },
+  feculent: { bg: '#FAEEDA', fg: '#854F0B', label: 'F' },
+  legume:   { bg: '#EAF3DE', fg: '#3B6D11', label: 'L' },
+  dessert:  { bg: '#FBEAF0', fg: '#993556', label: 'D' },
+};
+
 export default function PlanningPage() {
   const [span, setSpan] = useState<SupplySpan | null>(null);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
@@ -50,7 +58,7 @@ export default function PlanningPage() {
     const [sugData, suppliers, preps, est] = await Promise.all([
       fetchSuggestions(),
       fetchSuppliers(),
-      fetchPrepTasks(true), // force refresh pour avoir les derniers placements
+      fetchPrepTasks(true),
       fetchEstablishment(),
     ]);
 
@@ -143,12 +151,51 @@ export default function PlanningPage() {
 
   const COL_WIDTH = 150;
 
-  const shortName = (name: string) => name.split(/\s+(surgelé|qualité|boîte|UE|France|Import|IQF|DD|en rondelles|en branches|très fins|coupés|émincés|précuit)/i)[0].trim();
+  // shortName v3 : aggressif, sentence case, conserve le mot-clé essentiel.
+  // Couvre: "MAQUEREAU de ligne" → "Maquereau", "YAOURT nature basique demi écrémé pot" → "Yaourt",
+  // "COMTÉ bande verte (+4 mois)" → "Comté", "POIREAUX COUPES" → "Poireaux",
+  // "HARICOTS VERTS EXTRA FINS" → "Haricots verts", "OMELETTE fraîche nature poules au sol" → "Omelette",
+  // "Riz long indica étuve" → "Riz", "GALETTE A BASE DE CEREALES ET/OU LEGUMINEUSES" → "Galette céréales",
+  // "MOUSSE CHOCOLAT pot" → "Mousse chocolat", "CHOUX BROCOLIS EN FLEURETTES" → "Choux brocolis"
+  const shortName = (name: string) => {
+    let s = (name || '').toString().trim().toLowerCase();
+    if (!s) return '';
+
+    // 1. Supprimer ce qui suit une parenthèse ou crochet
+    s = s.split(/[(\[]/)[0].trim();
+
+    // 2. Supprimer "{nom} a base de {ingrédient}..." → garde "{nom} {ingrédient}"
+    const baseMatch = s.match(/^(\w[\wéèàâî']*)\s+(?:a|à)\s+base\s+de\s+(\w[\wéèàâî']*)/i);
+    if (baseMatch) {
+      s = `${baseMatch[1]} ${baseMatch[2]}`;
+    }
+
+    // 3. Supprimer suffixes de qualité / format / préparation
+    s = s.split(/\s+(?:de\s+ligne|de\s+qualit[ée]|nature\s+basique|nature|basique|fra[îi]che|surgel[ée]e?|surgel[ée]|coup[ée]s?|coup[ée]|coupes|[ée]minc[ée]s?|[ée]minc[ée]|[ée]tuv[ée]e?|[ée]tuv[ée]|etuve|pr[ée]cuit|qualit[ée]|long\s+\w+|au\s+sol|plein\s+air|demi\s+[ée]cr[ée]m[ée]?|en\s+fleurettes|en\s+rondelles|en\s+branches|en\s+cubes|en\s+lamelles|extra\s+\w+|tr[èe]s\s+\w+|pot|bande\s+\w+|\bUE\b|\bFrance\b|\bImport\b|\bIQF\b|\bDD\b|po[êe]l[ée]e?|po[êe]l[ée])\b/i)[0].trim();
+
+    // 4. Supprimer chiffres + unités (ex: 180/220gr, +4 mois)
+    s = s.replace(/\s*[+]?\d+[\d/\-]*\s*(?:gr|g|kg|mois|cm|mm|ml|l|cl)\b.*$/gi, '').trim();
+
+    // 5. Couper sur "et/ou", "ou", "+", "/"
+    s = s.split(/\s+(?:et\/ou|ou|\+|et)\s+/i)[0].trim();
+    s = s.split(/\//)[0].trim();
+
+    // 6. Limiter à 3 mots max
+    const words = s.split(/\s+/).filter(Boolean);
+    if (words.length > 3) s = words.slice(0, 3).join(' ');
+
+    // 7. Sentence case
+    if (!s) return '';
+    return s.charAt(0).toUpperCase() + s.slice(1);
+  };
 
   const renderMealCell = (meal: Suggestion | undefined, isPast: boolean) => {
     if (!meal) return null;
     const isExpanded = expandedMeal === meal.id;
     const isEditing = editingNote === meal.id;
+    const costPerPerson = meal.estimated_cost && employeeCount > 0
+      ? (meal.estimated_cost / employeeCount)
+      : null;
 
     if (!isExpanded) {
       return (
@@ -156,14 +203,37 @@ export default function PlanningPage() {
           className="bg-surface rounded border border-bordure px-1.5 py-1 mb-1 cursor-pointer hover:border-noir/30 transition-colors"
           onClick={() => setExpandedMeal(meal.id)}
         >
-          <p className="text-[11px] text-noir leading-snug">
-            <span className="font-data text-muted">{meal.meal_type === 'lunch' ? 'dej' : 'din'}</span>
-            {' '}
-            {meal.ingredients.map((ing) => shortName(ing.name)).join(', ')}
-          </p>
+          <div className="flex justify-between items-center mb-0.5">
+            <span className="font-data text-[9px] uppercase text-muted tracking-wide">
+              {meal.meal_type === 'lunch' ? 'Déjeuner' : 'Dîner'}
+            </span>
+            {costPerPerson !== null && (
+              <span className="font-data text-[9px] text-muted">
+                {costPerPerson.toFixed(2).replace('.', ',')} €/tête
+              </span>
+            )}
+          </div>
+          {meal.ingredients.map((ing, i) => {
+            const cat = CATEGORY_BADGE[(ing.category as string) || ''];
+            return (
+              <div key={i} className="flex items-center gap-1 leading-snug">
+                {cat ? (
+                  <span
+                    style={{ background: cat.bg, color: cat.fg }}
+                    className="text-[8px] font-data font-medium px-1 rounded shrink-0"
+                  >
+                    {cat.label}
+                  </span>
+                ) : (
+                  <span className="w-3 shrink-0" />
+                )}
+                <span className="text-[11px] text-noir truncate">{shortName(ing.name)}</span>
+              </div>
+            );
+          })}
           {meal.notes
-            ? <p className="text-[10px] text-noir/50 italic truncate">{meal.notes}</p>
-            : !isPast && <p className="text-[10px] text-muted/40">+ annoter</p>
+            ? <p className="text-[10px] text-noir/50 italic truncate mt-0.5">{meal.notes}</p>
+            : !isPast && <p className="text-[10px] text-muted/40 mt-0.5">+ annoter</p>
           }
         </div>
       );
@@ -172,17 +242,32 @@ export default function PlanningPage() {
     return (
       <div className="bg-surface rounded-lg border border-noir/20 p-2 mb-1">
         <div className="flex justify-between items-center mb-1">
-          <span className="font-data text-[10px] text-muted">{meal.meal_type === 'lunch' ? 'dej' : 'din'}</span>
+          <span className="font-data text-[10px] uppercase text-muted tracking-wide">
+            {meal.meal_type === 'lunch' ? 'Déjeuner' : 'Dîner'}
+          </span>
           <button onClick={() => { setExpandedMeal(null); setEditingNote(null); }} className="text-[10px] text-muted">fermer</button>
         </div>
-        {meal.ingredients.map((ing, i) => (
-          <div key={i} className="flex justify-between text-[11px] leading-tight">
-            <span className="text-noir">{shortName(ing.name)}</span>
-            <span className="font-data text-muted ml-1">{ing.quantity}{ing.unit}</span>
-          </div>
-        ))}
-        {meal.estimated_cost && employeeCount > 0 && (
-          <p className="font-data text-[10px] text-muted mt-1">~{(meal.estimated_cost / employeeCount).toFixed(2)} EUR/pers</p>
+        {meal.ingredients.map((ing, i) => {
+          const cat = CATEGORY_BADGE[(ing.category as string) || ''];
+          return (
+            <div key={i} className="flex items-center gap-1 text-[11px] leading-tight mb-0.5">
+              {cat ? (
+                <span
+                  style={{ background: cat.bg, color: cat.fg }}
+                  className="text-[8px] font-data font-medium px-1 rounded shrink-0"
+                >
+                  {cat.label}
+                </span>
+              ) : (
+                <span className="w-3 shrink-0" />
+              )}
+              <span className="text-noir flex-1 truncate">{shortName(ing.name)}</span>
+              <span className="font-data text-muted ml-1 shrink-0">{ing.quantity}{ing.unit}</span>
+            </div>
+          );
+        })}
+        {costPerPerson !== null && (
+          <p className="font-data text-[10px] text-muted mt-1">~{costPerPerson.toFixed(2).replace('.', ',')} €/tête</p>
         )}
         {meal.notes && !isEditing && (
           <p className="text-[10px] text-noir/60 italic mt-1 cursor-pointer" onClick={() => { setEditingNote(meal.id); setDraftNote(meal.notes || ''); }}>
@@ -353,7 +438,6 @@ export default function PlanningPage() {
 
       {/* LISTES DE COURSES PAR SPAN INTER-COMMANDE */}
       {suggestions.length > 0 && deliveryDays.length > 0 && (() => {
-        // Decouper les suggestions par span inter-commande
         const orderSpans: { label: string; dates: string[] }[] = [];
         let currentDates: string[] = [];
         let currentStart = '';
@@ -361,7 +445,6 @@ export default function PlanningPage() {
         spanDates.forEach((date) => {
           if (!currentStart) currentStart = date;
           currentDates.push(date);
-          // Si le lendemain est un jour de commande, on ferme le span
           const nextDate = new Date(date + 'T00:00:00');
           nextDate.setDate(nextDate.getDate() + 1);
           const nextDay = nextDate.getDay();

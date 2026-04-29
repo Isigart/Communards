@@ -10,15 +10,22 @@ export async function POST(req: NextRequest) {
   }
 
   const rows = templates.map((t: Record<string, unknown>) => ({
+    template_type: 'repas',
     name: t.name,
-    season: t.season,
-    protein_type: t.protein_type,
-    meal_type: t.meal_type,
+    categorie_gemrcn: t.categorie_gemrcn,
+    is_vegetarien: (t.is_vegetarien as boolean) ?? false,
+    is_vegan: (t.is_vegan as boolean) ?? false,
+    contains_porc: (t.contains_porc as boolean) ?? false,
+    contains_gluten: (t.contains_gluten as boolean) ?? false,
+    contains_lactose: (t.contains_lactose as boolean) ?? false,
+    halal_compatible: (t.halal_compatible as boolean) ?? true,
+    saison: t.saison || ['toutes'],
     tags: t.tags || [],
     ingredients: t.ingredients,
-    prep_notes: t.prep_notes || null,
     estimated_cost_per_person: t.estimated_cost_per_person,
-    cost_level: t.cost_level || null,
+    cost_level: t.cost_level || 'moyen',
+    source_lot: (t.source_lot as number) ?? 1,
+    generation_method: (t.generation_method as string) ?? 'api_import',
   }));
 
   const { data, error } = await supabase

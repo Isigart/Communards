@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import type { Establishment } from '@/lib/types';
 import { BUDGET_HCR } from '@/lib/types';
 import { computeSpanDefinitions } from '@/lib/spans';
+import { createBrowserClient } from '@/lib/supabase';
 import { getToken, fetchEstablishment, fetchSuppliers, invalidateEstablishment, invalidateSuppliers, invalidateSuggestions } from '@/lib/cache';
 
 type ServiceType = 'lunch' | 'dinner' | 'both';
@@ -268,6 +269,18 @@ export default function ReglagesPage() {
           <a href="/confidentialite" className="text-muted underline">Confidentialite</a>
           <a href="/mentions-legales" className="text-muted underline">Mentions legales</a>
         </div>
+
+        <button
+          onClick={async () => {
+            const supabase = createBrowserClient();
+            await supabase.auth.signOut();
+            window.location.href = '/';
+          }}
+          className="block text-sm text-noir underline"
+        >
+          Se déconnecter
+        </button>
+
         <button
           onClick={async () => {
             if (!confirm('Supprimer definitivement votre compte et toutes vos donnees ? Cette action est irreversible.')) return;
@@ -277,12 +290,14 @@ export default function ReglagesPage() {
               headers: { Authorization: `Bearer ${token}` },
             });
             if (res.ok) {
+              const supabase = createBrowserClient();
+              await supabase.auth.signOut();
               window.location.href = '/';
             } else {
               alert('Quelque chose a cloche. Reessaie.');
             }
           }}
-          className="text-xs text-rouge underline"
+          className="block text-xs text-rouge underline"
         >
           Supprimer mon compte et toutes mes donnees
         </button>

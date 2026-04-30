@@ -43,8 +43,19 @@ export default function OnboardingPage() {
 
   useEffect(() => {
     const supabase = createBrowserClient();
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (!session) { window.location.href = '/'; return; }
+      // Si user a déjà un établissement, on redirige vers le dashboard
+      // pour éviter les doublons et les "Invalid token" sur double-création
+      try {
+        const res = await fetch('/api/establishment', {
+          headers: { Authorization: `Bearer ${session.access_token}` },
+        });
+        if (res.ok) {
+          window.location.href = '/dashboard';
+          return;
+        }
+      } catch { /* skip — on laisse le user continuer le onboarding */ }
       setToken(session.access_token);
     });
   }, []);

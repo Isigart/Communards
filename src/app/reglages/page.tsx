@@ -18,6 +18,7 @@ const CONSTRAINTS_OPTIONS = [
   { value: 'vegetarien', label: 'Vegetarien' },
   { value: 'sans-porc', label: 'Sans porc' },
   { value: 'sans-gluten', label: 'Sans gluten' },
+  { value: 'sans-lactose', label: 'Sans lactose' },
 ];
 
 const SAVING_LABELS: Record<SavingStep, string> = {

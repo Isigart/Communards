@@ -63,18 +63,46 @@ export async function generateSuggestions(input: GenerateInput): Promise<Omit<Su
   // Filtrer selon les contraintes alimentaires
   const constraints: string[] = establishment.dietary_constraints || [];
   const beforeDietary = pool.length;
-  if (constraints.length > 0) {
+
+  // Sépare les contraintes "câblées" (booléens en base) des contraintes en texte libre
+  const KNOWN_CONSTRAINTS = ['vegetarien', 'sans-porc', 'halal', 'sans-gluten', 'sans-lactose'];
+  const knownConstraints = constraints.filter((c) => KNOWN_CONSTRAINTS.includes(c));
+  const customConstraints = constraints.filter((c) => !KNOWN_CONSTRAINTS.includes(c) && c.trim().length > 0);
+
+  if (knownConstraints.length > 0) {
     pool = pool.filter((t: Record<string, unknown>) => {
-      const tags = (t.tags as string[]) || [];
       const containsPorc = (t.contains_porc as boolean) || false;
       const containsGluten = (t.contains_gluten as boolean) || false;
       const isVege = (t.is_vegetarien as boolean) || false;
-      if (constraints.includes('vegetarien') && !isVege) return false;
-      if (constraints.includes('sans-porc') && containsPorc) return false;
-      if (constraints.includes('halal') && !(t.halal_compatible as boolean)) return false;
-      if (constraints.includes('sans-gluten') && containsGluten) return false;
-      if (constraints.includes('sans-lactose') && (t.contains_lactose as boolean)) return false;
+      if (knownConstraints.includes('vegetarien') && !isVege) return false;
+      if (knownConstraints.includes('sans-porc') && containsPorc) return false;
+      if (knownConstraints.includes('halal') && !(t.halal_compatible as boolean)) return false;
+      if (knownConstraints.includes('sans-gluten') && containsGluten) return false;
+      if (knownConstraints.includes('sans-lactose') && (t.contains_lactose as boolean)) return false;
       return true;
+    });
+  }
+
+  // Contraintes custom : on extrait le mot-clé et on exclut les cartes qui le contiennent
+  // Ex: "sans poireau", "pas de chèvre", "allergique aux noix" → keyword = poireau / chèvre / noix
+  type V3IngType = { name: string; quantity_kg?: number; price_ht_kg?: number; category?: string };
+  const customKeywords: string[] = [];
+  for (const constraint of customConstraints) {
+    const keyword = constraint
+      .toLowerCase()
+      .replace(/^(sans|pas\s+de|pas\s+d['']|allergique\s+(?:au[xs]?|[àa])?|aller?gie\s+(?:au[xs]?|[àa])?|j['']aime\s+pas|sans\s+les?)\s+/i, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (keyword.length >= 3) customKeywords.push(keyword);
+  }
+  if (customKeywords.length > 0) {
+    pool = pool.filter((t: Record<string, unknown>) => {
+      const ingNames = ((t.ingredients as V3IngType[]) || []).map((i) => (i.name || '').toLowerCase());
+      const cardName = ((t.name as string) || '').toLowerCase();
+      // Une carte est exclue si l'un de ses ingrédients (ou son nom) contient un mot-clé custom
+      return !customKeywords.some((kw) =>
+        cardName.includes(kw) || ingNames.some((n) => n.includes(kw))
+      );
     });
   }
 
@@ -142,8 +170,12 @@ export async function generateSuggestions(input: GenerateInput): Promise<Omit<Su
     `{"day_index":0,"meal_date":"${span.start_date}","meal_type":"${s}","template_index":${services.indexOf(s) * 5}}`
   ).join(',');
 
+  const customConstraintsLine = customConstraints.length > 0
+    ? `\nContraintes spécifiques du chef à respecter STRICTEMENT : ${customConstraints.join(' / ')}.`
+    : '';
+
   const prompt = `Choisis des repas pour ${span.day_count} jours (${span.start_date} au ${span.end_date}), ${servicesLabel}.
-${nbPersons} personnes, max ${establishment.budget_per_meal}€/pers/repas.
+${nbPersons} personnes, max ${establishment.budget_per_meal}€/pers/repas.${customConstraintsLine}
 ${feedbackContext}
 
 Repas disponibles (index|nom|categorie_gemrcn|cout):

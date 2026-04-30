@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import type { Establishment, Suggestion, SupplySpan } from '@/lib/types';
 import { getToken, fetchEstablishment, fetchSuggestions, fetchSuppliers, invalidateSuggestions } from '@/lib/cache';
 
+type FeedbackStatus = 'done' | 'modified' | 'skipped';
+
 export default function DashboardPage() {
   const [establishment, setEstablishment] = useState<Establishment | null>(null);
   const [currentSpan, setCurrentSpan] = useState<SupplySpan | null>(null);
@@ -12,6 +14,10 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [genError, setGenError] = useState<string | null>(null);
+
+  // Commentaires inline par suggestion
+  const [commentOpen, setCommentOpen] = useState<Record<string, boolean>>({});
+  const [commentText, setCommentText] = useState<Record<string, string>>({});
 
   useEffect(() => { loadDashboard(); }, []);
 
@@ -88,15 +94,19 @@ export default function DashboardPage() {
     setGenerating(false);
   }
 
-  async function handleFeedback(suggestionId: string, status: 'done' | 'modified' | 'skipped') {
+  async function handleFeedback(suggestionId: string, status: FeedbackStatus) {
     const token = await getToken();
     if (!token) return;
+    const notes = (commentText[suggestionId] || '').trim() || null;
     await fetch('/api/feedback', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ suggestion_id: suggestionId, status }),
+      body: JSON.stringify({ suggestion_id: suggestionId, status, notes }),
     });
     invalidateSuggestions();
+    // Reset le commentaire local
+    setCommentOpen((prev) => ({ ...prev, [suggestionId]: false }));
+    setCommentText((prev) => ({ ...prev, [suggestionId]: '' }));
     const fresh = await fetchSuggestions(true);
     setSuggestions(fresh.suggestions);
   }
@@ -170,32 +180,86 @@ export default function DashboardPage() {
           </div>
         ) : (
           <div className="space-y-3">
-            {todaySuggestions.map((s) => (
-              <div key={s.id} className="card">
-                <span className="font-titre text-sm text-noir">
-                  {s.meal_type === 'lunch' ? 'Dejeuner' : 'Diner'}
-                </span>
-                <div className="mt-2 space-y-1">
-                  {s.ingredients.map((ing, i) => (
-                    <p key={i} className="text-sm text-noir">
-                      {ing.name} <span className="text-muted font-data text-xs">{ing.quantity} {ing.unit}</span>
+            {todaySuggestions.map((s) => {
+              const isCommentOpen = commentOpen[s.id] || false;
+              const noteValue = commentText[s.id] || '';
+              return (
+                <div key={s.id} className="card">
+                  <span className="font-titre text-sm text-noir">
+                    {s.meal_type === 'lunch' ? 'Dejeuner' : 'Diner'}
+                  </span>
+                  <div className="mt-2 space-y-1">
+                    {s.ingredients.map((ing, i) => (
+                      <p key={i} className="text-sm text-noir">
+                        {ing.name} <span className="text-muted font-data text-xs">{ing.quantity} {ing.unit}</span>
+                      </p>
+                    ))}
+                  </div>
+                  {s.estimated_cost && establishment?.employee_count && (
+                    <p className="text-xs font-data text-muted mt-2">
+                      ~{(s.estimated_cost / establishment.employee_count).toFixed(2)} EUR/pers
                     </p>
-                  ))}
+                  )}
+                  {s.notes && (
+                    <p className="text-xs text-noir/60 mt-2 italic">{s.notes}</p>
+                  )}
+
+                  {/* Zone commentaire collapsible */}
+                  {isCommentOpen && (
+                    <textarea
+                      className="input w-full text-sm mt-3"
+                      placeholder="Ce qui a clochè (optionnel)..."
+                      rows={2}
+                      value={noteValue}
+                      onChange={(e) => setCommentText((prev) => ({ ...prev, [s.id]: e.target.value }))}
+                      autoFocus
+                    />
+                  )}
+
+                  {/* Boutons feedback */}
+                  <div className="flex items-center gap-2 mt-3 justify-between">
+                    {!isCommentOpen ? (
+                      <button
+                        onClick={() => setCommentOpen((prev) => ({ ...prev, [s.id]: true }))}
+                        className="text-xs text-muted underline"
+                      >
+                        + commentaire
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => setCommentOpen((prev) => ({ ...prev, [s.id]: false }))}
+                        className="text-xs text-muted underline"
+                      >
+                        annuler
+                      </button>
+                    )}
+                    <div className="flex gap-3">
+                      <button
+                        onClick={() => handleFeedback(s.id, 'done')}
+                        className="text-xl leading-none opacity-40 hover:opacity-100 transition-opacity"
+                        title="Fait"
+                      >
+                        &#x1F44D;
+                      </button>
+                      <button
+                        onClick={() => handleFeedback(s.id, 'modified')}
+                        className="text-xl leading-none opacity-40 hover:opacity-100 transition-opacity"
+                        title="Modifié"
+                      >
+                        &#x270F;
+                      </button>
+                      <button
+                        onClick={() => handleFeedback(s.id, 'skipped')}
+                        className="text-xl leading-none opacity-40 hover:opacity-100 transition-opacity"
+                        title="Non fait"
+                      >
+                        &#x1F44E;
+                      </button>
+                    </div>
+                  </div>
                 </div>
-                {s.estimated_cost && establishment?.employee_count && (
-                  <p className="text-xs font-data text-muted mt-2">
-                    ~{(s.estimated_cost / establishment.employee_count).toFixed(2)} EUR/pers
-                  </p>
-                )}
-                {s.notes && (
-                  <p className="text-xs text-noir/60 mt-2 italic">{s.notes}</p>
-                )}
-                <div className="flex gap-3 mt-3 justify-end">
-                  <button onClick={() => handleFeedback(s.id, 'done')} className="text-xl leading-none opacity-40 hover:opacity-100 transition-opacity" title="Bon repas">&#x1F44D;</button>
-                  <button onClick={() => handleFeedback(s.id, 'skipped')} className="text-xl leading-none opacity-40 hover:opacity-100 transition-opacity" title="Pas top">&#x1F44E;</button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </section>

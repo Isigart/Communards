@@ -87,7 +87,7 @@ export async function generateSuggestions(input: GenerateInput): Promise<Omit<Su
     `${i}|${t.name}|${t.categorie_gemrcn}|${(t.estimated_cost_per_person as number)?.toFixed(2)}€`
   ).join('\n');
 
-  // Construire le contexte feedback avec les noms des repas
+  // Construire le contexte feedback avec les noms des repas et les commentaires de l'user
   let feedbackContext = '';
   if (pastFeedback.length > 0) {
     // Charger les suggestions associees aux feedbacks
@@ -101,28 +101,25 @@ export async function generateSuggestions(input: GenerateInput): Promise<Omit<Su
       feedbackSuggestions = data || [];
     }
 
-    const liked = pastFeedback
-      .filter(f => f.status === 'done')
-      .map(f => {
-        const sug = feedbackSuggestions.find(s => s.id === f.suggestion_id);
-        if (!sug) return null;
-        const ings = (sug.ingredients as { name: string }[]) || [];
-        return ings.slice(0, 2).map(i => i.name).join(', ');
-      })
-      .filter(Boolean);
+    const summarize = (f: Feedback): string | null => {
+      const sug = feedbackSuggestions.find(s => s.id === f.suggestion_id);
+      if (!sug) return null;
+      const ings = (sug.ingredients as { name: string }[]) || [];
+      const ingSummary = ings.slice(0, 3).map(i => i.name).join(', ');
+      const note = f.notes ? ` [${f.notes}]` : '';
+      return `${ingSummary}${note}`;
+    };
 
-    const disliked = pastFeedback
-      .filter(f => f.status === 'skipped')
-      .map(f => {
-        const sug = feedbackSuggestions.find(s => s.id === f.suggestion_id);
-        if (!sug) return null;
-        const ings = (sug.ingredients as { name: string }[]) || [];
-        return ings.slice(0, 2).map(i => i.name).join(', ');
-      })
-      .filter(Boolean);
+    const liked = pastFeedback.filter(f => f.status === 'done').map(summarize).filter(Boolean);
+    const modified = pastFeedback.filter(f => f.status === 'modified').map(summarize).filter(Boolean);
+    const skipped = pastFeedback.filter(f => f.status === 'skipped').map(summarize).filter(Boolean);
 
-    if (liked.length > 0) feedbackContext += `\nRepas apprecies: ${liked.join(' | ')}`;
-    if (disliked.length > 0) feedbackContext += `\nRepas a eviter: ${disliked.join(' | ')}`;
+    if (liked.length > 0) feedbackContext += `\nRepas réussis (faire +): ${liked.join(' | ')}`;
+    if (modified.length > 0) feedbackContext += `\nRepas adaptés par l'user (la base est OK mais voir commentaires): ${modified.join(' | ')}`;
+    if (skipped.length > 0) feedbackContext += `\nRepas évités (à ne pas reproposer, voir commentaires): ${skipped.join(' | ')}`;
+    if (modified.length > 0 || skipped.length > 0) {
+      feedbackContext += `\n\nLis attentivement les commentaires entre [crochets] : ils contiennent les vraies préférences du chef. Évite les patterns critiqués.`;
+    }
   }
 
   // Determiner les services a generer

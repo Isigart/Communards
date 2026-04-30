@@ -189,42 +189,95 @@ Reponds UNIQUEMENT avec les index choisis en JSON:
     }
   }
 
-  // Post-traitement: corriger les redondances de proteines
-  // Regle: pas la meme proteine sur 2 repas consecutifs (dej + din du meme jour, ou diner soir + dejeuner lendemain)
+  // Post-traitement: corriger les redondances sur 3 niveaux
+  // 1. Cartes : pas la même carte sur fenêtre de 4 repas (2 jours)
+  // 2. Accompagnements (féculent + légume) : pas le même sur les 2 derniers repas
+  //    (les desserts/laitages sont OK à répéter — yaourt tous les jours c'est conforme GEMRCN)
+  // 3. Catégorie GEMRCN protéine : pas la même sur 4 repas consécutifs
   selections.sort((a, b) => {
     if (a.meal_date !== b.meal_date) return a.meal_date.localeCompare(b.meal_date);
     return a.meal_type === 'lunch' ? -1 : 1;
   });
 
-  const usedInWindow: string[] = []; // proteines des 2 derniers repas
+  type V3IngredientType = { name: string; quantity_kg?: number; price_ht_kg?: number; category?: string };
+
+  const recentCardIds: number[] = [];        // window de 4 cartes (2 jours)
+  const recentSides: string[] = [];          // window de féculents+légumes des 2 derniers repas
+  const recentCategories: string[] = [];     // window de 4 catégories GEMRCN
+
+  // On ne suit QUE les féculents et légumes (les accompagnements visibles)
+  // → ignorer les protéines (déjà gérées par catégorie GEMRCN) et desserts (laitages OK à répéter)
+  const getCardSides = (t: Record<string, unknown>): string[] =>
+    ((t.ingredients as V3IngredientType[]) || [])
+      .filter((ing) => ing.category === 'feculent' || ing.category === 'legume')
+      .map((ing) => ing.name);
+
   for (let i = 0; i < selections.length; i++) {
     const sel = selections[i];
     const template = filteredPool[sel.template_index];
     if (!template) continue;
+
     const protein = template.categorie_gemrcn as string;
+    const cardSides = getCardSides(template);
+    const sidesOverlap = cardSides.filter((n) => recentSides.includes(n)).length;
 
-    if (usedInWindow.includes(protein)) {
-      // Chercher un remplacement : categorie_gemrcn differente
-      const candidates = filteredPool
-        .map((t: Record<string, unknown>, idx: number) => ({ t, idx }))
-        .filter(({ idx, t }) =>
-          idx !== sel.template_index &&
-          !usedInWindow.includes(t.categorie_gemrcn as string)
-        );
+    const cardRepeated = recentCardIds.includes(sel.template_index);
+    const proteinRepeated = recentCategories.includes(protein);
+    const sidesRepeated = sidesOverlap >= 1; // strict : aucun féculent/légume en commun
 
-      if (candidates.length > 0) {
-        const pick = candidates[Math.floor(Math.random() * candidates.length)];
-        selections[i] = { ...sel, template_index: pick.idx };
-        usedInWindow.push(pick.t.categorie_gemrcn as string);
-      } else {
-        usedInWindow.push(protein);
+    if (cardRepeated || proteinRepeated || sidesRepeated) {
+      // Cherche le meilleur remplaçant
+      // Stratégie : on essaie d'abord "tout propre" (overlap=0, carte/cat différentes),
+      // puis on relâche progressivement pour ne jamais bloquer
+      const allCandidates = filteredPool
+        .map((t: Record<string, unknown>, idx: number) => {
+          const sides = getCardSides(t);
+          const ovlp = sides.filter((n) => recentSides.includes(n)).length;
+          return { t, idx, ovlp, cat: t.categorie_gemrcn as string };
+        })
+        .filter(({ idx }) => idx !== sel.template_index);
+
+      const tryFilters = [
+        // 1. parfait : carte non-récente, catégorie non-récente, 0 overlap accompagnement
+        (c: typeof allCandidates[0]) => !recentCardIds.includes(c.idx) && !recentCategories.includes(c.cat) && c.ovlp === 0,
+        // 2. assoupli : on accepte 1 overlap d'accompagnement
+        (c: typeof allCandidates[0]) => !recentCardIds.includes(c.idx) && !recentCategories.includes(c.cat) && c.ovlp <= 1,
+        // 3. on accepte la même catégorie protéine si rien d'autre
+        (c: typeof allCandidates[0]) => !recentCardIds.includes(c.idx) && c.ovlp === 0,
+        // 4. dernier recours : juste pas la même carte
+        (c: typeof allCandidates[0]) => !recentCardIds.includes(c.idx),
+      ];
+
+      let pick: typeof allCandidates[0] | null = null;
+      for (const f of tryFilters) {
+        const matches = allCandidates.filter(f);
+        if (matches.length > 0) {
+          // Parmi les matches, prendre celui avec le moins d'overlap, sinon random
+          matches.sort((a, b) => a.ovlp - b.ovlp);
+          const minOvlp = matches[0].ovlp;
+          const best = matches.filter((c) => c.ovlp === minOvlp);
+          pick = best[Math.floor(Math.random() * best.length)];
+          break;
+        }
       }
-    } else {
-      usedInWindow.push(protein);
+
+      if (pick) {
+        selections[i] = { ...sel, template_index: pick.idx };
+      }
     }
 
-    // Ne garder que les 4 proteines les plus recentes (2 jours complets)
-    if (usedInWindow.length > 4) usedInWindow.shift();
+    // Mettre à jour les fenêtres avec la carte finalement retenue
+    const finalTemplate = filteredPool[selections[i].template_index];
+    if (finalTemplate) {
+      recentCardIds.push(selections[i].template_index);
+      recentCategories.push(finalTemplate.categorie_gemrcn as string);
+      recentSides.push(...getCardSides(finalTemplate));
+    }
+
+    // Sliding windows
+    while (recentCardIds.length > 4) recentCardIds.shift();         // 4 cartes = 2 jours
+    while (recentCategories.length > 4) recentCategories.shift();   // 4 catégories = 2 jours
+    while (recentSides.length > 4) recentSides.shift();             // ~4 sides = 2 derniers repas (1 fec + 1 leg × 2)
   }
 
   // Transformer les selections en suggestions completes

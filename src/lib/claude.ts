@@ -201,9 +201,10 @@ Reponds UNIQUEMENT avec les index choisis en JSON:
 
   type V3IngredientType = { name: string; quantity_kg?: number; price_ht_kg?: number; category?: string };
 
-  const recentCardIds: number[] = [];        // window de 8 cartes (4 jours)
-  const recentSides: string[] = [];          // window de féculents+légumes des 6 derniers repas (3 jours)
-  const recentCategories: string[] = [];     // window de 4 catégories GEMRCN
+  const recentCardIds: number[] = [];          // window de 12 cartes (6 jours)
+  const recentSides: string[] = [];            // window de féculents+légumes (6 jours)
+  const recentCategories: string[] = [];       // window de 4 catégories GEMRCN protéine
+  const recentDessertBuckets: string[] = [];   // window de 3 derniers desserts par bucket (yaourt/crème/compote/fruit)
 
   // Normalise le nom d'un ingrédient pour dédoubler les variantes
   // ("HARICOTS VERTS EXTRA FINS" et "HARICOTS VERTS TRES FINS" → "haricots verts")
@@ -222,11 +223,29 @@ Reponds UNIQUEMENT avec les index choisis en JSON:
   };
 
   // On ne suit QUE les féculents et légumes (les accompagnements visibles)
-  // → ignorer les protéines (déjà gérées par catégorie GEMRCN) et desserts (laitages OK à répéter)
+  // → ignorer les protéines (déjà gérées par catégorie GEMRCN)
   const getCardSides = (t: Record<string, unknown>): string[] =>
     ((t.ingredients as V3IngredientType[]) || [])
       .filter((ing) => ing.category === 'feculent' || ing.category === 'legume')
       .map((ing) => normalizeSide(ing.name));
+
+  // Classifie un dessert dans 5 buckets : yaourt | creme_dessert | compote | fruit | fromage
+  // (yaourt = laitages frais yaourt/fromage blanc/petit suisse ; fromage = fromages affinés)
+  // Renvoie null pour pâtisseries / autres → pas trackés (libres de répéter)
+  const classifyDessert = (name: string): string | null => {
+    const s = (name || '').toLowerCase();
+    if (/yaourt|yogh?ou?rt|fromage\s+blanc|petit\s+suisse/.test(s)) return 'yaourt';
+    if (/cr[èe]me\s+(dessert|caramel|brul[ée]e|chocolat|p[âa]tissi[èe]re|anglaise|vanille)|mousse|flan|liegeois|riz\s+au\s+lait|semoule\s+au\s+lait/.test(s)) return 'creme_dessert';
+    if (/compote/.test(s)) return 'compote';
+    if (/pomme|poire|banane|orange|cl[ée]mentine|mandarine|fraise|raisin|p[êe]che|abricot|kiwi|melon|past[èe]que|prune|cerise|nectarine|ananas|mangue|fruit/.test(s)) return 'fruit';
+    if (/comt[ée]|emmental|gruy[èe]re|brie|camembert|tomme|reblochon|munster|roquefort|bleu|chevre|mimolette|cantal|morbier|raclette|fromage/.test(s)) return 'fromage';
+    return null; // pâtisserie, autres → libre
+  };
+
+  const getCardDessertBucket = (t: Record<string, unknown>): string | null => {
+    const dessertIng = ((t.ingredients as V3IngredientType[]) || []).find((i) => i.category === 'dessert');
+    return dessertIng ? classifyDessert(dessertIng.name) : null;
+  };
 
   for (let i = 0; i < selections.length; i++) {
     const sel = selections[i];
@@ -236,12 +255,14 @@ Reponds UNIQUEMENT avec les index choisis en JSON:
     const protein = template.categorie_gemrcn as string;
     const cardSides = getCardSides(template);
     const sidesOverlap = cardSides.filter((n) => recentSides.includes(n)).length;
+    const dessertBucket = getCardDessertBucket(template);
 
     const cardRepeated = recentCardIds.includes(sel.template_index);
     const proteinRepeated = recentCategories.includes(protein);
     const sidesRepeated = sidesOverlap >= 1; // strict : aucun féculent/légume en commun
+    const dessertRepeated = dessertBucket !== null && recentDessertBuckets.includes(dessertBucket);
 
-    if (cardRepeated || proteinRepeated || sidesRepeated) {
+    if (cardRepeated || proteinRepeated || sidesRepeated || dessertRepeated) {
       // Cherche le meilleur remplaçant
       // Stratégie : on essaie d'abord "tout propre" (overlap=0, carte/cat différentes),
       // puis on relâche progressivement pour ne jamais bloquer
@@ -249,18 +270,22 @@ Reponds UNIQUEMENT avec les index choisis en JSON:
         .map((t: Record<string, unknown>, idx: number) => {
           const sides = getCardSides(t);
           const ovlp = sides.filter((n) => recentSides.includes(n)).length;
-          return { t, idx, ovlp, cat: t.categorie_gemrcn as string };
+          const dBucket = getCardDessertBucket(t);
+          const dRepeats = dBucket !== null && recentDessertBuckets.includes(dBucket);
+          return { t, idx, ovlp, cat: t.categorie_gemrcn as string, dBucket, dRepeats };
         })
         .filter(({ idx }) => idx !== sel.template_index);
 
       const tryFilters = [
-        // 1. parfait : carte non-récente, catégorie non-récente, 0 overlap accompagnement
+        // 1. parfait : carte non-récente, cat protéine non-récente, 0 overlap, dessert OK
+        (c: typeof allCandidates[0]) => !recentCardIds.includes(c.idx) && !recentCategories.includes(c.cat) && c.ovlp === 0 && !c.dRepeats,
+        // 2. on relâche le dessert (mais protéine et accompagnement restent stricts)
         (c: typeof allCandidates[0]) => !recentCardIds.includes(c.idx) && !recentCategories.includes(c.cat) && c.ovlp === 0,
-        // 2. assoupli : on accepte 1 overlap d'accompagnement
+        // 3. on relâche à 1 overlap d'accompagnement
         (c: typeof allCandidates[0]) => !recentCardIds.includes(c.idx) && !recentCategories.includes(c.cat) && c.ovlp <= 1,
-        // 3. on accepte la même catégorie protéine si rien d'autre
+        // 4. on accepte la même catégorie protéine
         (c: typeof allCandidates[0]) => !recentCardIds.includes(c.idx) && c.ovlp === 0,
-        // 4. dernier recours : juste pas la même carte
+        // 5. dernier recours : juste pas la même carte
         (c: typeof allCandidates[0]) => !recentCardIds.includes(c.idx),
       ];
 
@@ -288,12 +313,15 @@ Reponds UNIQUEMENT avec les index choisis en JSON:
       recentCardIds.push(selections[i].template_index);
       recentCategories.push(finalTemplate.categorie_gemrcn as string);
       recentSides.push(...getCardSides(finalTemplate));
+      const finalDessertBucket = getCardDessertBucket(finalTemplate);
+      if (finalDessertBucket) recentDessertBuckets.push(finalDessertBucket);
     }
 
     // Sliding windows
-    while (recentCardIds.length > 12) recentCardIds.shift();         // 12 cartes = 6 jours (pas de doublon de carte sur 6 jours)
-    while (recentCategories.length > 4) recentCategories.shift();    // 4 catégories = 2 jours (anti-redite protéine)
-    while (recentSides.length > 24) recentSides.shift();             // 24 sides = 12 repas = 6 jours (féculent/légume distinct sur 6 jours)
+    while (recentCardIds.length > 12) recentCardIds.shift();              // 12 cartes = 6 jours (pas de doublon de carte sur 6 jours)
+    while (recentCategories.length > 4) recentCategories.shift();         // 4 catégories = 2 jours (anti-redite protéine)
+    while (recentSides.length > 24) recentSides.shift();                  // 24 sides = 12 repas = 6 jours (féculent/légume distinct sur 6 jours)
+    while (recentDessertBuckets.length > 3) recentDessertBuckets.shift(); // 3 derniers desserts (rotation entre les 5 buckets)
   }
 
   // Transformer les selections en suggestions completes

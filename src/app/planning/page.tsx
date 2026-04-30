@@ -179,7 +179,7 @@ export default function PlanningPage() {
     }
 
     // 3. Supprimer suffixes de qualité / format / préparation
-    s = s.split(/\s+(?:de\s+ligne|de\s+qualit[ée]|nature\s+basique|nature|basique|fra[îi]che|surgel[ée]e?|surgel[ée]|coup[ée]s?|coup[ée]|coupes|[ée]minc[ée]s?|[ée]minc[ée]|[ée]tuv[ée]e?|[ée]tuv[ée]|etuve|pr[ée]cuit|qualit[ée]|long\s+\w+|au\s+sol|plein\s+air|demi\s+[ée]cr[ée]m[ée]?|en\s+fleurettes|en\s+rondelles|en\s+branches|en\s+cubes|en\s+lamelles|extra\s+\w+|tr[èe]s\s+\w+|pot|bande\s+\w+|\bUE\b|\bFrance\b|\bImport\b|\bIQF\b|\bDD\b|po[êe]l[ée]e?|po[êe]l[ée])\b/i)[0].trim();
+    s = s.split(/\s+(?:coquille|de\s+ligne|de\s+qualit[ée]|nature\s+basique|nature|basique|fra[îi]che|surgel[ée]e?|surgel[ée]|coup[ée]s?|coup[ée]|coupes|[ée]minc[ée]s?|[ée]minc[ée]|[ée]tuv[ée]e?|[ée]tuv[ée]|etuve|pr[ée]cuit|qualit[ée]|long\s+\w+|au\s+sol|plein\s+air|demi\s+[ée]cr[ée]m[ée]?|en\s+fleurettes|en\s+rondelles|en\s+branches|en\s+cubes|en\s+lamelles|extra\s+\w+|tr[èe]s\s+\w+|pot|bande\s+\w+|\bUE\b|\bFrance\b|\bImport\b|\bIQF\b|\bDD\b|po[êe]l[ée]e?|po[êe]l[ée])\b/i)[0].trim();
 
     // 4. Supprimer chiffres + unités (ex: 180/220gr, +4 mois)
     s = s.replace(/\s*[+]?\d+[\d/\-]*\s*(?:gr|g|kg|mois|cm|mm|ml|l|cl)\b.*$/gi, '').trim();

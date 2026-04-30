@@ -120,14 +120,22 @@ export default function PlanningPage() {
     return <div className="flex min-h-screen items-center justify-center"><p className="text-muted">On prepare le planning...</p></div>;
   }
 
-  const today = new Date().toISOString().split('T')[0];
+  // Format YYYY-MM-DD en heure LOCALE (jamais toISOString — convertit en UTC et décale les dates en CEST)
+  const fmtLocal = (d: Date) => {
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  };
+  const today = fmtLocal(new Date());
 
   const spanDates: string[] = [];
   if (span) {
-    const start = new Date(span.start_date + 'T00:00:00');
-    const end = new Date(span.end_date + 'T00:00:00');
+    // T12:00:00 (midi) plutôt que minuit pour éviter les bascules DST
+    const start = new Date(span.start_date + 'T12:00:00');
+    const end = new Date(span.end_date + 'T12:00:00');
     for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-      spanDates.push(d.toISOString().split('T')[0]);
+      spanDates.push(fmtLocal(d));
     }
   }
 
@@ -180,9 +188,9 @@ export default function PlanningPage() {
     s = s.split(/\s+(?:et\/ou|ou|\+|et)\s+/i)[0].trim();
     s = s.split(/\//)[0].trim();
 
-    // 6. Limiter à 3 mots max
+    // 6. Limiter à 5 mots max (laisse passer "purée pomme de terre", "choux de bruxelles", "daurade royale sauvage")
     const words = s.split(/\s+/).filter(Boolean);
-    if (words.length > 3) s = words.slice(0, 3).join(' ');
+    if (words.length > 5) s = words.slice(0, 5).join(' ');
 
     // 7. Sentence case
     if (!s) return '';
@@ -204,11 +212,11 @@ export default function PlanningPage() {
           onClick={() => setExpandedMeal(meal.id)}
         >
           <div className="flex justify-between items-center mb-0.5">
-            <span className="font-data text-[9px] uppercase text-muted tracking-wide">
-              {meal.meal_type === 'lunch' ? 'Déjeuner' : 'Dîner'}
+            <span className="font-data text-[10px] text-muted">
+              {meal.meal_type === 'lunch' ? 'déj' : 'dîn'}
             </span>
             {costPerPerson !== null && (
-              <span className="font-data text-[9px] text-muted">
+              <span className="font-data text-[10px] text-muted">
                 {costPerPerson.toFixed(2).replace('.', ',')} €/tête
               </span>
             )}
@@ -242,8 +250,8 @@ export default function PlanningPage() {
     return (
       <div className="bg-surface rounded-lg border border-noir/20 p-2 mb-1">
         <div className="flex justify-between items-center mb-1">
-          <span className="font-data text-[10px] uppercase text-muted tracking-wide">
-            {meal.meal_type === 'lunch' ? 'Déjeuner' : 'Dîner'}
+          <span className="font-data text-[10px] text-muted">
+            {meal.meal_type === 'lunch' ? 'déj' : 'dîn'}
           </span>
           <button onClick={() => { setExpandedMeal(null); setEditingNote(null); }} className="text-[10px] text-muted">fermer</button>
         </div>

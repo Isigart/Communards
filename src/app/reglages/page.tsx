@@ -7,6 +7,7 @@ import { computeSpanDefinitions } from '@/lib/spans';
 import { getToken, fetchEstablishment, fetchSuppliers, invalidateEstablishment, invalidateSuppliers, invalidateSuggestions } from '@/lib/cache';
 
 type ServiceType = 'lunch' | 'dinner' | 'both';
+type SavingStep = 'idle' | 'updating' | 'configuring' | 'generating';
 
 const DAY_LABELS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
 const DAY_VALUES = [1, 2, 3, 4, 5, 6, 0];
@@ -18,9 +19,17 @@ const CONSTRAINTS_OPTIONS = [
   { value: 'sans-gluten', label: 'Sans gluten' },
 ];
 
+const SAVING_LABELS: Record<SavingStep, string> = {
+  idle: 'enregistrer et regenerer →',
+  updating: 'on enregistre les réglages...',
+  configuring: 'on prépare le nouveau planning...',
+  generating: 'on génère votre planning (ça peut prendre 30s)...',
+};
+
 export default function ReglagesPage() {
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [savingStep, setSavingStep] = useState<SavingStep>('idle');
+  const [error, setError] = useState<string | null>(null);
   const [token, setToken] = useState<string | null>(null);
 
   const [name, setName] = useState('');
@@ -31,6 +40,8 @@ export default function ReglagesPage() {
   const [supplierId, setSupplierId] = useState<string | null>(null);
   const [constraints, setConstraints] = useState<string[]>([]);
   const [constraintOther, setConstraintOther] = useState('');
+
+  const saving = savingStep !== 'idle';
 
   useEffect(() => { loadSettings(); }, []);
 
@@ -71,50 +82,79 @@ export default function ReglagesPage() {
     });
   };
 
+  async function safeFetch(url: string, init: RequestInit, errorContext: string): Promise<Response> {
+    try {
+      const res = await fetch(url, init);
+      if (!res.ok) {
+        let msg = `Erreur ${res.status}`;
+        try {
+          const body = await res.json();
+          if (body?.error) msg = body.error;
+        } catch { /* skip */ }
+        throw new Error(`${errorContext} : ${msg}`);
+      }
+      return res;
+    } catch (e) {
+      if (e instanceof Error) throw e;
+      throw new Error(`${errorContext} : erreur réseau`);
+    }
+  }
+
   async function handleSave() {
     if (!token) return;
-    setSaving(true);
+    setError(null);
 
     const services = service === 'both' ? ['lunch', 'dinner'] : [service];
     const dietaryConstraints = constraints.filter((c) => c !== 'aucune');
     if (constraintOther.trim()) dietaryConstraints.push(constraintOther.trim());
 
-    await fetch('/api/establishment', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ name, employee_count: employeeCount, services, dietary_constraints: dietaryConstraints, planning_days: planningDays }),
-    });
-
-    if (supplierId) {
-      await fetch('/api/suppliers', {
-        method: 'PUT',
+    try {
+      // Étape 1 : update établissement + supplier
+      setSavingStep('updating');
+      await safeFetch('/api/establishment', {
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ id: supplierId, delivery_days: deliveryDays }),
-      });
-    }
+        body: JSON.stringify({ name, employee_count: employeeCount, services, dietary_constraints: dietaryConstraints, planning_days: planningDays }),
+      }, 'Mise à jour de la maison');
 
-    const spanRes = await fetch('/api/suggestions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ regenerate: true }),
-    });
+      if (supplierId) {
+        await safeFetch('/api/suppliers', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ id: supplierId, delivery_days: deliveryDays }),
+        }, 'Mise à jour du fournisseur');
+      }
 
-    if (spanRes.ok) {
+      // Étape 2 : régénérer le span
+      setSavingStep('configuring');
+      const spanRes = await safeFetch('/api/suggestions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ regenerate: true }),
+      }, 'Préparation du nouveau planning');
+
       const spanData = await spanRes.json();
+
+      // Étape 3 : générer les suggestions
       if (spanData.status === 'pending' && spanData.span) {
-        await fetch('/api/suggestions/generate', {
+        setSavingStep('generating');
+        await safeFetch('/api/suggestions/generate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
           body: JSON.stringify({ span_id: spanData.span.id }),
-        });
+        }, 'Génération du planning');
       }
-    }
 
-    invalidateEstablishment();
-    invalidateSuppliers();
-    invalidateSuggestions();
-    setSaving(false);
-    window.location.href = '/dashboard';
+      // Tout OK → invalidation cache + dashboard
+      invalidateEstablishment();
+      invalidateSuppliers();
+      invalidateSuggestions();
+      window.location.href = '/dashboard';
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Erreur inconnue';
+      setError(msg);
+      setSavingStep('idle');
+    }
   }
 
   if (loading) {
@@ -248,10 +288,19 @@ export default function ReglagesPage() {
         </button>
       </section>
 
+      {/* Erreur */}
+      {error && (
+        <div className="p-3 rounded-lg border border-rouge bg-rouge/5">
+          <p className="text-sm text-rouge font-medium">Quelque chose a cloché.</p>
+          <p className="text-xs text-rouge/80 mt-1">{error}</p>
+          <p className="text-xs text-muted mt-2">Réessaie. Si ça persiste, vérifie ta connexion.</p>
+        </div>
+      )}
+
       <div className="fixed bottom-0 left-0 right-0 bg-papier border-t border-bordure p-4">
         <div className="max-w-lg mx-auto">
           <button onClick={handleSave} disabled={saving} className="btn-rouge w-full">
-            {saving ? 'on regenere le planning...' : 'enregistrer et regenerer →'}
+            {SAVING_LABELS[savingStep]}
           </button>
         </div>
       </div>

@@ -6,6 +6,7 @@ import { BUDGET_HCR } from '@/lib/types';
 import { computeSpanDefinitions } from '@/lib/spans';
 
 type ServiceType = 'lunch' | 'dinner' | 'both';
+type LoadingStep = 'idle' | 'creating' | 'configuring' | 'generating';
 
 const DAY_LABELS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
 const DAY_VALUES = [1, 2, 3, 4, 5, 6, 0];
@@ -17,9 +18,17 @@ const CONSTRAINTS_OPTIONS = [
   { value: 'sans-gluten', label: 'Sans gluten' },
 ];
 
+const LOADING_LABELS: Record<LoadingStep, string> = {
+  idle: '',
+  creating: 'on prépare votre maison...',
+  configuring: 'on configure le fournisseur...',
+  generating: 'on génère votre planning (ça peut prendre 30s)...',
+};
+
 export default function OnboardingPage() {
   const [step, setStep] = useState(0);
-  const [loading, setLoading] = useState(false);
+  const [loadingStep, setLoadingStep] = useState<LoadingStep>('idle');
+  const [error, setError] = useState<string | null>(null);
   const [token, setToken] = useState<string | null>(null);
 
   const [name, setName] = useState('');
@@ -29,6 +38,8 @@ export default function OnboardingPage() {
   const [orderDays, setOrderDays] = useState<number[]>([]);
   const [constraints, setConstraints] = useState<string[]>([]);
   const [constraintOther, setConstraintOther] = useState('');
+
+  const loading = loadingStep !== 'idle';
 
   useEffect(() => {
     const supabase = createBrowserClient();
@@ -63,48 +74,77 @@ export default function OnboardingPage() {
     }
   };
 
+  async function safeFetch(url: string, init: RequestInit, errorContext: string): Promise<Response> {
+    try {
+      const res = await fetch(url, init);
+      if (!res.ok) {
+        let msg = `Erreur ${res.status}`;
+        try {
+          const body = await res.json();
+          if (body?.error) msg = body.error;
+        } catch { /* JSON parse fail, on garde le code HTTP */ }
+        throw new Error(`${errorContext} : ${msg}`);
+      }
+      return res;
+    } catch (e) {
+      if (e instanceof Error) throw e;
+      throw new Error(`${errorContext} : erreur réseau`);
+    }
+  }
+
   const handleSubmit = async () => {
     if (!token) return;
-    setLoading(true);
+    setError(null);
 
     const employeeCount = service === 'both' ? countLunch + countDinner : countLunch;
     const services = service === 'both' ? ['lunch', 'dinner'] : service === 'dinner' ? ['dinner'] : ['lunch'];
     const allConstraints = [...constraints];
     if (constraintOther.trim()) allConstraints.push(constraintOther.trim());
 
-    const res = await fetch('/api/establishment', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({
-        name: name.trim(),
-        employee_count: employeeCount,
-        budget_per_meal: BUDGET_HCR,
-        market: 'fr',
-        services,
-        dietary_constraints: allConstraints.filter((c) => c !== 'aucune'),
-        supplier_name: 'Fournisseur principal',
-        delivery_days: orderDays,
-      }),
-    });
+    try {
+      // Étape 1 : créer l'établissement + fournisseur
+      setLoadingStep('creating');
+      await safeFetch('/api/establishment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          name: name.trim(),
+          employee_count: employeeCount,
+          budget_per_meal: BUDGET_HCR,
+          market: 'fr',
+          services,
+          dietary_constraints: allConstraints.filter((c) => c !== 'aucune'),
+          supplier_name: 'Fournisseur principal',
+          delivery_days: orderDays,
+        }),
+      }, 'Création de la maison');
 
-    if (res.ok) {
-      const spanRes = await fetch('/api/suggestions', {
+      // Étape 2 : créer le span
+      setLoadingStep('configuring');
+      const spanRes = await safeFetch('/api/suggestions', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
-      });
-      if (spanRes.ok) {
-        const spanData = await spanRes.json();
-        if (spanData.status === 'pending' && spanData.span) {
-          await fetch('/api/suggestions/generate', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-            body: JSON.stringify({ span_id: spanData.span.id }),
-          });
-        }
+      }, 'Configuration du planning');
+
+      const spanData = await spanRes.json();
+
+      // Étape 3 : générer les suggestions via Claude
+      if (spanData.status === 'pending' && spanData.span) {
+        setLoadingStep('generating');
+        await safeFetch('/api/suggestions/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ span_id: spanData.span.id }),
+        }, 'Génération du planning');
       }
+
+      // Tout s'est bien passé → dashboard
       window.location.href = '/dashboard';
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Erreur inconnue';
+      setError(msg);
+      setLoadingStep('idle');
     }
-    setLoading(false);
   };
 
   const progress = ((step + 1) / 5) * 100;
@@ -230,12 +270,21 @@ export default function OnboardingPage() {
             <input type="text" className="input" placeholder="Autre contrainte..." value={constraintOther} onChange={(e) => setConstraintOther(e.target.value)} />
           </div>
         )}
+
+        {/* Erreur */}
+        {error && (
+          <div className="mt-6 p-3 rounded-lg border border-rouge bg-rouge/5">
+            <p className="text-sm text-rouge font-medium">Quelque chose a cloché.</p>
+            <p className="text-xs text-rouge/80 mt-1">{error}</p>
+            <p className="text-xs text-muted mt-2">Réessaie. Si ça persiste, vérifie ta connexion ou contacte-nous.</p>
+          </div>
+        )}
       </div>
 
       {/* Navigation fixe */}
       <div className="fixed bottom-0 left-0 right-0 bg-papier border-t border-bordure p-4">
         <div className="max-w-md mx-auto flex gap-3">
-          {step > 0 && (
+          {step > 0 && !loading && (
             <button onClick={() => setStep(step - 1)} className="btn-secondary px-6">←</button>
           )}
           <button
@@ -246,7 +295,7 @@ export default function OnboardingPage() {
                 ? 'bg-noir text-papier' : 'bg-bordure text-muted cursor-not-allowed'
             }`}
           >
-            {loading ? 'on prepare le service...' : step === 4 ? 'voir mon planning →' : 'continuer →'}
+            {loading ? LOADING_LABELS[loadingStep] : step === 4 ? 'voir mon planning →' : 'continuer →'}
           </button>
         </div>
       </div>

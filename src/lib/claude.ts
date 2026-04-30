@@ -201,16 +201,32 @@ Reponds UNIQUEMENT avec les index choisis en JSON:
 
   type V3IngredientType = { name: string; quantity_kg?: number; price_ht_kg?: number; category?: string };
 
-  const recentCardIds: number[] = [];        // window de 4 cartes (2 jours)
-  const recentSides: string[] = [];          // window de féculents+légumes des 2 derniers repas
+  const recentCardIds: number[] = [];        // window de 8 cartes (4 jours)
+  const recentSides: string[] = [];          // window de féculents+légumes des 6 derniers repas (3 jours)
   const recentCategories: string[] = [];     // window de 4 catégories GEMRCN
+
+  // Normalise le nom d'un ingrédient pour dédoubler les variantes
+  // ("HARICOTS VERTS EXTRA FINS" et "HARICOTS VERTS TRES FINS" → "haricots verts")
+  const normalizeSide = (name: string): string => {
+    let s = (name || '').toLowerCase().trim();
+    // Enlever calibrages, qualités, formats
+    s = s.replace(/\s+(extra|tr[èe]s|grossi[èe]rement|finement|moyen|fins?|gros|petits?)\s*\w*/gi, '');
+    // Enlever préparations
+    s = s.replace(/\s+(en\s+\w+|coup[ée]s?|[ée]minc[ée]s?|en\s+rondelles|en\s+lamelles|en\s+branches|en\s+fleurettes|en\s+cubes)/gi, '');
+    // Enlever qualifs
+    s = s.replace(/\s+(bio|fra[îi]che?|congel[ée]e?|surgel[ée]e?|[ée]tuv[ée]e?|sec|long\s+\w+|indica|basmati)/gi, '');
+    // Enlever digits/parens
+    s = s.replace(/\s*\([^)]*\)/g, '').replace(/\s+\d+\S*/g, '');
+    // Compresser espaces
+    return s.replace(/\s+/g, ' ').trim();
+  };
 
   // On ne suit QUE les féculents et légumes (les accompagnements visibles)
   // → ignorer les protéines (déjà gérées par catégorie GEMRCN) et desserts (laitages OK à répéter)
   const getCardSides = (t: Record<string, unknown>): string[] =>
     ((t.ingredients as V3IngredientType[]) || [])
       .filter((ing) => ing.category === 'feculent' || ing.category === 'legume')
-      .map((ing) => ing.name);
+      .map((ing) => normalizeSide(ing.name));
 
   for (let i = 0; i < selections.length; i++) {
     const sel = selections[i];
@@ -275,9 +291,9 @@ Reponds UNIQUEMENT avec les index choisis en JSON:
     }
 
     // Sliding windows
-    while (recentCardIds.length > 4) recentCardIds.shift();         // 4 cartes = 2 jours
-    while (recentCategories.length > 4) recentCategories.shift();   // 4 catégories = 2 jours
-    while (recentSides.length > 4) recentSides.shift();             // ~4 sides = 2 derniers repas (1 fec + 1 leg × 2)
+    while (recentCardIds.length > 12) recentCardIds.shift();         // 12 cartes = 6 jours (pas de doublon de carte sur 6 jours)
+    while (recentCategories.length > 4) recentCategories.shift();    // 4 catégories = 2 jours (anti-redite protéine)
+    while (recentSides.length > 24) recentSides.shift();             // 24 sides = 12 repas = 6 jours (féculent/légume distinct sur 6 jours)
   }
 
   // Transformer les selections en suggestions completes

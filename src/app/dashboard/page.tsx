@@ -77,7 +77,7 @@ export default function DashboardPage() {
     if (genRes.ok) {
       const result = await genRes.json();
       if (result.count === 0) {
-        setGenError('Claude a repondu mais 0 repas generes. Verifie les templates.');
+        setGenError('Claude a répondu mais 0 repas générés. Vérifie les templates.');
         setGenerating(false);
         return;
       }
@@ -114,7 +114,7 @@ export default function DashboardPage() {
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <p className="text-muted">On prepare le service...</p>
+        <p className="text-muted">On prépare le service...</p>
       </div>
     );
   }
@@ -129,37 +129,50 @@ export default function DashboardPage() {
     <div className="min-h-screen p-4 max-w-lg mx-auto space-y-6">
       <p className="text-sm text-muted">{establishment?.name}</p>
 
-      {/* Alerte commande */}
+      {/* Alerte commande — proéminente le jour J */}
       {isOrderDay && (
-        <div className="border border-rouge rounded-xl px-4 py-3 flex items-center gap-3">
-          <span className="font-data text-[10px] uppercase bg-rouge text-papier px-2 py-1 rounded-full">Commande</span>
-          <p className="text-sm text-noir">Aujourd&apos;hui, c&apos;est jour de commande.</p>
+        <div className="bg-rouge text-papier rounded-xl px-4 py-4 space-y-2">
+          <div className="flex items-center gap-3">
+            <span className="font-data text-[10px] uppercase bg-papier text-rouge px-2 py-1 rounded-full">Commande J</span>
+            <p className="font-titre text-base">C&apos;est aujourd&apos;hui qu&apos;on commande.</p>
+          </div>
+          <p className="text-sm text-papier/80">Liste de courses prête dans le Planning, faut juste passer la commande à ton fournisseur.</p>
+          <a href="/planning" className="inline-block text-xs font-data uppercase underline tracking-wide">Voir la liste →</a>
         </div>
       )}
 
       {/* Span info */}
-      {currentSpan && (
+      {currentSpan && suggestions.length > 0 && (
         <div className="card">
-          <p className="text-xs text-muted uppercase tracking-wide">Prochain span</p>
+          <p className="text-xs text-muted uppercase tracking-wide">Planning en cours</p>
           <p className="text-sm text-noir mt-1 font-data">
             {new Date(currentSpan.start_date + 'T00:00:00').toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' })} → {new Date(currentSpan.end_date + 'T00:00:00').toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' })}
           </p>
-          {suggestions.length === 0 && (
-            <p className="text-sm text-muted mt-2">Rien de prevu. Qui cuisine ?</p>
+        </div>
+      )}
+
+      {/* Empty state — accueillant avec CTA évident */}
+      {suggestions.length === 0 && (
+        <div className="card text-center space-y-4 py-8">
+          <p className="font-titre text-lg text-noir">Prêt à servir ?</p>
+          <p className="text-sm text-muted">
+            Pas encore de planning. Génère ton premier menu en quelques secondes,
+            on s&apos;occupe du reste.
+          </p>
+          <button onClick={generateSuggestions} disabled={generating} className="btn-rouge w-full">
+            {generating ? 'On prépare le planning...' : 'Générer mon planning →'}
+          </button>
+          {currentSpan && (
+            <p className="text-xs text-muted font-data">
+              Span : {new Date(currentSpan.start_date + 'T00:00:00').toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' })} → {new Date(currentSpan.end_date + 'T00:00:00').toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' })}
+            </p>
           )}
         </div>
       )}
 
-      {/* Generate button */}
-      {suggestions.length === 0 && (
-        <button onClick={generateSuggestions} disabled={generating} className="btn-rouge w-full">
-          {generating ? 'on prepare le planning...' : 'generer les suggestions →'}
-        </button>
-      )}
-
       {genError && (
         <div className="border border-rouge rounded-xl px-4 py-3 bg-rouge/5">
-          <p className="text-xs font-data uppercase text-rouge mb-1">Erreur generation</p>
+          <p className="text-xs font-data uppercase text-rouge mb-1">Erreur génération</p>
           <p className="text-sm text-noir break-words">{genError}</p>
         </div>
       )}
@@ -169,13 +182,13 @@ export default function DashboardPage() {
         <h2 className="font-titre text-lg text-noir mb-3">Aujourd&apos;hui</h2>
         {todaySuggestions.length === 0 ? (
           <div className="space-y-3">
-            <p className="text-sm text-muted">
-              {suggestions.length === 0 ? 'Rien de prevu. Qui cuisine ?' : 'Pas de repas prevu aujourd\'hui.'}
-            </p>
             {suggestions.length > 0 && (
-              <button onClick={generateSuggestions} disabled={generating} className="btn-rouge w-full">
-                {generating ? 'on ajoute ca...' : '+ ajouter le repas du jour →'}
-              </button>
+              <>
+                <p className="text-sm text-muted">Pas de repas prévu aujourd&apos;hui.</p>
+                <button onClick={generateSuggestions} disabled={generating} className="btn-rouge w-full">
+                  {generating ? 'On ajoute ça...' : '+ Ajouter le repas du jour →'}
+                </button>
+              </>
             )}
           </div>
         ) : (
@@ -186,18 +199,18 @@ export default function DashboardPage() {
               return (
                 <div key={s.id} className="card">
                   <span className="font-titre text-sm text-noir">
-                    {s.meal_type === 'lunch' ? 'Dejeuner' : 'Diner'}
+                    {s.meal_type === 'lunch' ? 'Déjeuner' : 'Dîner'}
                   </span>
                   <div className="mt-2 space-y-1">
                     {s.ingredients.map((ing, i) => (
-                      <p key={i} className="text-sm text-noir">
+                      <p key={i} className={`text-sm ${ing.category === 'proteine' ? 'text-noir font-medium' : 'text-noir/80'}`}>
                         {ing.name} <span className="text-muted font-data text-xs">{ing.quantity} {ing.unit}</span>
                       </p>
                     ))}
                   </div>
                   {s.estimated_cost && establishment?.employee_count && (
                     <p className="text-xs font-data text-muted mt-2">
-                      ~{(s.estimated_cost / establishment.employee_count).toFixed(2)} EUR/pers
+                      ~{(s.estimated_cost / establishment.employee_count).toFixed(2)} €/pers
                     </p>
                   )}
                   {s.notes && (
@@ -208,7 +221,7 @@ export default function DashboardPage() {
                   {isCommentOpen && (
                     <textarea
                       className="input w-full text-sm mt-3"
-                      placeholder="Ce qui a clochè (optionnel)..."
+                      placeholder="Ce qui a cloché (optionnel)..."
                       rows={2}
                       value={noteValue}
                       onChange={(e) => setCommentText((prev) => ({ ...prev, [s.id]: e.target.value }))}
@@ -216,46 +229,46 @@ export default function DashboardPage() {
                     />
                   )}
 
-                  {/* Boutons feedback */}
-                  <div className="flex items-center gap-2 mt-3 justify-between">
+                  {/* Boutons feedback — texte court + couleur du status */}
+                  <div className="mt-3 space-y-2">
+                    <div className="grid grid-cols-3 gap-2">
+                      <button
+                        onClick={() => handleFeedback(s.id, 'done')}
+                        className="py-2 rounded-lg border border-vert/30 bg-vert/5 text-vert text-xs font-medium hover:bg-vert/10 transition-colors"
+                        style={{ borderColor: '#3B6D11', backgroundColor: '#EAF3DE', color: '#3B6D11' }}
+                      >
+                        Fait
+                      </button>
+                      <button
+                        onClick={() => handleFeedback(s.id, 'modified')}
+                        className="py-2 rounded-lg text-xs font-medium transition-colors"
+                        style={{ borderWidth: 1, borderColor: '#854F0B', backgroundColor: '#FAEEDA', color: '#854F0B' }}
+                      >
+                        Adapté
+                      </button>
+                      <button
+                        onClick={() => handleFeedback(s.id, 'skipped')}
+                        className="py-2 rounded-lg text-xs font-medium transition-colors"
+                        style={{ borderWidth: 1, borderColor: '#993C1D', backgroundColor: '#FAECE7', color: '#993C1D' }}
+                      >
+                        Zappé
+                      </button>
+                    </div>
                     {!isCommentOpen ? (
                       <button
                         onClick={() => setCommentOpen((prev) => ({ ...prev, [s.id]: true }))}
                         className="text-xs text-muted underline"
                       >
-                        + commentaire
+                        + commenter
                       </button>
                     ) : (
                       <button
                         onClick={() => setCommentOpen((prev) => ({ ...prev, [s.id]: false }))}
                         className="text-xs text-muted underline"
                       >
-                        annuler
+                        annuler le commentaire
                       </button>
                     )}
-                    <div className="flex gap-3">
-                      <button
-                        onClick={() => handleFeedback(s.id, 'done')}
-                        className="text-xl leading-none opacity-40 hover:opacity-100 transition-opacity"
-                        title="Fait"
-                      >
-                        &#x1F44D;
-                      </button>
-                      <button
-                        onClick={() => handleFeedback(s.id, 'modified')}
-                        className="text-xl leading-none opacity-40 hover:opacity-100 transition-opacity"
-                        title="Modifié"
-                      >
-                        &#x270F;
-                      </button>
-                      <button
-                        onClick={() => handleFeedback(s.id, 'skipped')}
-                        className="text-xl leading-none opacity-40 hover:opacity-100 transition-opacity"
-                        title="Non fait"
-                      >
-                        &#x1F44E;
-                      </button>
-                    </div>
                   </div>
                 </div>
               );

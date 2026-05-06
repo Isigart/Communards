@@ -13,7 +13,7 @@ const DAY_VALUES = [1, 2, 3, 4, 5, 6, 0];
 
 const CONSTRAINTS_OPTIONS = [
   { value: 'aucune', label: 'Aucune' },
-  { value: 'vegetarien', label: 'Vegetarien' },
+  { value: 'vegetarien', label: 'Végétarien' },
   { value: 'sans-porc', label: 'Sans porc' },
   { value: 'sans-gluten', label: 'Sans gluten' },
   { value: 'sans-lactose', label: 'Sans lactose' },
@@ -171,7 +171,7 @@ export default function OnboardingPage() {
       <div className="max-w-md mx-auto px-4 pt-8">
         {/* Progress */}
         <div className="mb-2 flex justify-between items-center">
-          <span className="text-xs text-muted">Etape {step + 1} / 5</span>
+          <span className="text-xs text-muted">Étape {step + 1} / 5</span>
           <span className="font-titre text-sm text-noir">L&apos;Ordinaire</span>
         </div>
         <div className="h-1 bg-bordure rounded-full mb-8">
@@ -189,9 +189,9 @@ export default function OnboardingPage() {
         {/* Step 1: Services */}
         {step === 1 && (
           <div className="space-y-4">
-            <h2 className="font-titre text-xl text-noir">Quels services a nourrir ?</h2>
+            <h2 className="font-titre text-xl text-noir">Quels services à nourrir ?</h2>
             <div className="space-y-3">
-              {([['lunch', 'Dejeuner uniquement'], ['dinner', 'Diner uniquement'], ['both', 'Les deux']] as [ServiceType, string][]).map(([value, label]) => (
+              {([['lunch', 'Déjeuner uniquement'], ['dinner', 'Dîner uniquement'], ['both', 'Les deux']] as [ServiceType, string][]).map(([value, label]) => (
                 <button
                   key={value}
                   onClick={() => setService(value)}
@@ -209,7 +209,7 @@ export default function OnboardingPage() {
         {/* Step 2: Nombre de personnes */}
         {step === 2 && (
           <div className="space-y-4">
-            <h2 className="font-titre text-xl text-noir">Combien a table ?</h2>
+            <h2 className="font-titre text-xl text-noir">Combien à table ?</h2>
             {service === 'both' ? (
               <div className="space-y-4">
                 <div>
@@ -225,8 +225,8 @@ export default function OnboardingPage() {
               <input type="number" className="input text-lg text-center font-data" value={countLunch} onChange={(e) => setCountLunch(Math.max(1, parseInt(e.target.value) || 1))} min={1} autoFocus />
             )}
             <div className="card">
-              <p className="text-sm text-muted">Budget legal HCR : <span className="font-data">{BUDGET_HCR} EUR</span>/repas/pers</p>
-              <p className="text-lg font-data text-noir mt-1">{budgetPreview().toFixed(0)} EUR / semaine</p>
+              <p className="text-sm text-muted">Budget légal HCR : <span className="font-data">{BUDGET_HCR} €</span>/repas/pers</p>
+              <p className="text-lg font-data text-noir mt-1">{budgetPreview().toFixed(0)} € / semaine</p>
             </div>
           </div>
         )}
@@ -254,7 +254,7 @@ export default function OnboardingPage() {
               })}
             </div>
             {orderDays.length > 0 && (
-              <p className="text-sm text-muted font-data">{computeSpanDefinitions(orderDays).length} {computeSpanDefinitions(orderDays).length > 1 ? 'periodes' : 'periode'} entre chaque commande</p>
+              <p className="text-sm text-muted font-data">{computeSpanDefinitions(orderDays).length} {computeSpanDefinitions(orderDays).length > 1 ? 'périodes' : 'période'} entre chaque commande</p>
             )}
           </div>
         )}
@@ -262,7 +262,7 @@ export default function OnboardingPage() {
         {/* Step 4: Contraintes alimentaires */}
         {step === 4 && (
           <div className="space-y-4">
-            <h2 className="font-titre text-xl text-noir">Des contraintes a table ?</h2>
+            <h2 className="font-titre text-xl text-noir">Des contraintes à table ?</h2>
             <div className="grid grid-cols-2 gap-2">
               {CONSTRAINTS_OPTIONS.map((opt) => {
                 const selected = constraints.includes(opt.value);
@@ -307,7 +307,7 @@ export default function OnboardingPage() {
                 ? 'bg-noir text-papier' : 'bg-bordure text-muted cursor-not-allowed'
             }`}
           >
-            {loading ? LOADING_LABELS[loadingStep] : step === 4 ? 'voir mon planning →' : 'continuer →'}
+            {loading ? LOADING_LABELS[loadingStep] : step === 4 ? 'Voir mon planning →' : 'Continuer →'}
           </button>
         </div>
       </div>

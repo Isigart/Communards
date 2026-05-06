@@ -15,7 +15,7 @@ const DAY_VALUES = [1, 2, 3, 4, 5, 6, 0];
 
 const CONSTRAINTS_OPTIONS = [
   { value: 'aucune', label: 'Aucune' },
-  { value: 'vegetarien', label: 'Vegetarien' },
+  { value: 'vegetarien', label: 'Végétarien' },
   { value: 'sans-porc', label: 'Sans porc' },
   { value: 'sans-gluten', label: 'Sans gluten' },
   { value: 'sans-lactose', label: 'Sans lactose' },
@@ -166,8 +166,8 @@ export default function ReglagesPage() {
   return (
     <div className="min-h-screen p-4 max-w-lg mx-auto space-y-6 pb-24">
       <header>
-        <h1 className="font-titre text-lg text-noir">Reglages</h1>
-        <p className="text-sm text-muted">Modifie tes parametres, on regenere derriere.</p>
+        <h1 className="font-titre text-lg text-noir">Réglages</h1>
+        <p className="text-sm text-muted">Modifie tes paramètres, on régénère derrière.</p>
       </header>
 
       <section className="card space-y-3">
@@ -178,7 +178,7 @@ export default function ReglagesPage() {
       <section className="card space-y-3">
         <h2 className="font-titre text-sm text-noir">Services</h2>
         <div className="space-y-2">
-          {([['lunch', 'Dejeuner uniquement'], ['dinner', 'Diner uniquement'], ['both', 'Les deux']] as [ServiceType, string][]).map(([value, label]) => (
+          {([['lunch', 'Déjeuner uniquement'], ['dinner', 'Dîner uniquement'], ['both', 'Les deux']] as [ServiceType, string][]).map(([value, label]) => (
             <button
               key={value}
               onClick={() => setService(value)}
@@ -193,10 +193,10 @@ export default function ReglagesPage() {
       </section>
 
       <section className="card space-y-3">
-        <h2 className="font-titre text-sm text-noir">Combien a table ?</h2>
+        <h2 className="font-titre text-sm text-noir">Combien à table ?</h2>
         <input type="number" className="input text-center font-data" value={employeeCount} onChange={(e) => setEmployeeCount(Math.max(1, parseInt(e.target.value) || 1))} min={1} />
         <p className="text-xs text-muted">
-          Budget : <span className="font-data">{(employeeCount * BUDGET_HCR * 5).toFixed(0)} EUR</span> / semaine
+          Budget : <span className="font-data">{(employeeCount * BUDGET_HCR * 5).toFixed(0)} €</span> / semaine
         </p>
       </section>
 
@@ -221,13 +221,13 @@ export default function ReglagesPage() {
           })}
         </div>
         {deliveryDays.length > 0 && (
-          <p className="text-xs text-muted font-data">{computeSpanDefinitions(deliveryDays).length} {computeSpanDefinitions(deliveryDays).length > 1 ? 'periodes' : 'periode'} entre chaque commande</p>
+          <p className="text-xs text-muted font-data">{computeSpanDefinitions(deliveryDays).length} {computeSpanDefinitions(deliveryDays).length > 1 ? 'périodes' : 'période'} entre chaque commande</p>
         )}
       </section>
 
       <section className="card space-y-3">
-        <h2 className="font-titre text-sm text-noir">Duree du planning</h2>
-        <p className="text-xs text-muted">Combien de jours de repas generer ?</p>
+        <h2 className="font-titre text-sm text-noir">Durée du planning</h2>
+        <p className="text-xs text-muted">Combien de jours de repas générer ?</p>
         <div className="flex gap-2">
           {[7, 14, 21].map((d) => (
             <button
@@ -244,7 +244,7 @@ export default function ReglagesPage() {
       </section>
 
       <section className="card space-y-3">
-        <h2 className="font-titre text-sm text-noir">Contraintes a table</h2>
+        <h2 className="font-titre text-sm text-noir">Contraintes à table</h2>
         <div className="grid grid-cols-2 gap-2">
           {CONSTRAINTS_OPTIONS.map((opt) => {
             const selected = constraints.includes(opt.value);
@@ -267,8 +267,8 @@ export default function ReglagesPage() {
       <section className="card space-y-3">
         <h2 className="font-titre text-sm text-noir">Compte</h2>
         <div className="flex gap-3 text-xs">
-          <a href="/confidentialite" className="text-muted underline">Confidentialite</a>
-          <a href="/mentions-legales" className="text-muted underline">Mentions legales</a>
+          <a href="/confidentialite" className="text-muted underline">Confidentialité</a>
+          <a href="/mentions-legales" className="text-muted underline">Mentions légales</a>
         </div>
 
         <button
@@ -284,7 +284,7 @@ export default function ReglagesPage() {
 
         <button
           onClick={async () => {
-            if (!confirm('Supprimer definitivement votre compte et toutes vos donnees ? Cette action est irreversible.')) return;
+            if (!confirm('Supprimer définitivement votre compte et toutes vos données ? Cette action est irréversible.')) return;
             if (!token) return;
             const res = await fetch('/api/account', {
               method: 'DELETE',
@@ -295,12 +295,12 @@ export default function ReglagesPage() {
               await supabase.auth.signOut();
               window.location.href = '/';
             } else {
-              alert('Quelque chose a cloche. Reessaie.');
+              alert('Quelque chose a cloché. Réessaie.');
             }
           }}
           className="block text-xs text-rouge underline"
         >
-          Supprimer mon compte et toutes mes donnees
+          Supprimer mon compte et toutes mes données
         </button>
       </section>
 

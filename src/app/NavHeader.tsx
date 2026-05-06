@@ -9,7 +9,7 @@ const NAV_ITEMS = [
   { href: '/dashboard', label: 'Accueil' },
   { href: '/planning', label: 'Planning' },
   { href: '/briefing', label: 'Briefing' },
-  { href: '/reglages', label: 'Reglages' },
+  { href: '/reglages', label: 'Réglages' },
 ];
 
 const HIDDEN_ON = ['/', '/onboarding', '/demo', '/enquete'];
@@ -18,7 +18,7 @@ export default function NavHeader() {
   const pathname = usePathname();
   const isVisible = !HIDDEN_ON.includes(pathname) && !pathname.startsWith('/brief/');
 
-  // Prefetch toutes les donnees des que le header est visible
+  // Prefetch toutes les données dès que le header est visible
   useEffect(() => {
     if (isVisible) {
       prefetchAll();

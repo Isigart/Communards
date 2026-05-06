@@ -188,9 +188,16 @@ export default function PlanningPage() {
     s = s.split(/\s+(?:et\/ou|ou|\+|et)\s+/i)[0].trim();
     s = s.split(/\//)[0].trim();
 
-    // 6. Limiter à 5 mots max (laisse passer "purée pomme de terre", "choux de bruxelles", "daurade royale sauvage")
+    // 6. Limiter intelligemment :
+    //    - 3 mots si le mot 2 ou 3 est un mot de liaison (de/à/au/aux/du/des) → "pomme de terre", "choux de bruxelles"
+    //    - 2 mots sinon → "daurade royale" au lieu de "daurade royale sauvage"
     const words = s.split(/\s+/).filter(Boolean);
-    if (words.length > 5) s = words.slice(0, 5).join(' ');
+    const LINKERS = new Set(['de', 'à', 'a', 'au', 'aux', 'du', 'des']);
+    if (words.length > 2) {
+      const hasLinker = LINKERS.has(words[1]) || (words.length > 2 && LINKERS.has(words[2]));
+      const limit = hasLinker ? 3 : 2;
+      if (words.length > limit) s = words.slice(0, limit).join(' ');
+    }
 
     // 7. Sentence case
     if (!s) return '';
@@ -235,7 +242,7 @@ export default function PlanningPage() {
                 ) : (
                   <span className="w-3 shrink-0" />
                 )}
-                <span className="text-[11px] text-noir truncate">{shortName(ing.name)}</span>
+                <span className={`text-[11px] truncate ${ing.category === 'proteine' ? 'text-noir font-medium' : 'text-noir/80'}`}>{shortName(ing.name)}</span>
               </div>
             );
           })}

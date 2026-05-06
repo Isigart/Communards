@@ -376,7 +376,7 @@ export default function PlanningPage() {
         });
 
         return orderSpans.map((os, idx) => {
-          const agg: Record<string, { quantity: number; unit: string }> = {};
+          const agg: Record<string, { quantity: number; unit: string; category: string }> = {};
           suggestions
             .filter((s) => os.dates.includes(s.meal_date))
             .forEach((s) => {
@@ -386,25 +386,49 @@ export default function PlanningPage() {
                 if (agg[key]) {
                   agg[key].quantity += qty;
                 } else {
-                  agg[key] = { quantity: qty, unit: ing.unit };
+                  agg[key] = { quantity: qty, unit: ing.unit, category: ing.category || 'autre' };
                 }
               });
             });
-          const sorted = Object.entries(agg).sort(([a], [b]) => a.localeCompare(b));
-          if (sorted.length === 0) return null;
+
+          const categoryLabels: Record<string, string> = {
+            proteine: 'Proteines',
+            feculent: 'Feculents',
+            legume: 'Legumes',
+            dessert: 'Desserts',
+            autre: 'Autre',
+          };
+          const categoryOrder = ['proteine', 'legume', 'feculent', 'dessert', 'autre'];
+
+          const byCategory: Record<string, [string, { quantity: number; unit: string }][]> = {};
+          Object.entries(agg).forEach(([name, val]) => {
+            const cat = val.category;
+            if (!byCategory[cat]) byCategory[cat] = [];
+            byCategory[cat].push([name, { quantity: val.quantity, unit: val.unit }]);
+          });
+          Object.values(byCategory).forEach(items => items.sort(([a], [b]) => a.localeCompare(b)));
+
+          const categories = categoryOrder.filter(c => byCategory[c]?.length > 0);
+          if (categories.length === 0) return null;
+
           return (
             <section key={idx} className="mt-6">
               <h2 className="font-titre text-base text-noir mb-1">Liste de courses</h2>
               <p className="text-xs font-data text-muted mb-3">{os.label}</p>
-              <div className="card">
-                <div className="space-y-1">
-                  {sorted.map(([name, { quantity, unit }]) => (
-                    <div key={name} className="flex justify-between items-center py-0.5">
-                      <span className="text-sm text-noir">{name}</span>
-                      <span className="font-data text-sm text-muted">{quantity.toFixed(1)} {unit}</span>
+              <div className="space-y-3">
+                {categories.map((cat) => (
+                  <div key={cat} className="card">
+                    <p className="text-xs uppercase tracking-wide text-muted mb-2">{categoryLabels[cat] || cat}</p>
+                    <div className="space-y-1">
+                      {byCategory[cat].map(([name, { quantity, unit }]) => (
+                        <div key={name} className="flex justify-between items-center py-0.5">
+                          <span className="text-sm text-noir">{name}</span>
+                          <span className="font-data text-sm text-muted">{quantity.toFixed(2)} {unit}</span>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
+                  </div>
+                ))}
               </div>
             </section>
           );

@@ -166,23 +166,43 @@ export async function generateSuggestions(input: GenerateInput): Promise<Omit<Su
     `${i}|${t.name}|${t.categorie_gemrcn}|${(t.estimated_cost_per_person as number)?.toFixed(2)}€`
   ).join('\n');
 
-  const exampleSelections = services.map((s) =>
-    `{"day_index":0,"meal_date":"${span.start_date}","meal_type":"${s}","template_index":${services.indexOf(s) * 5}}`
-  ).join(',');
+  // Pré-calculer la liste exacte des créneaux à remplir (date + service).
+  // On ne laisse PLUS Claude calculer les dates (auparavant il pouvait oublier
+  // le dernier créneau, typiquement le dejeuner du jour de commande).
+  const expectedSlots: { day_index: number; meal_date: string; meal_type: 'lunch' | 'dinner' }[] = [];
+  const spanStart = new Date(span.start_date + 'T12:00:00');
+  for (let d = 0; d < span.day_count; d++) {
+    const date = new Date(spanStart);
+    date.setDate(date.getDate() + d);
+    const yyyy = date.getFullYear();
+    const mm = String(date.getMonth() + 1).padStart(2, '0');
+    const dd = String(date.getDate()).padStart(2, '0');
+    const dateStr = `${yyyy}-${mm}-${dd}`;
+    for (const s of services) {
+      expectedSlots.push({ day_index: d, meal_date: dateStr, meal_type: s as 'lunch' | 'dinner' });
+    }
+  }
+
+  const slotsLabel = expectedSlots
+    .map((s, i) => `${i}|${s.meal_date}|${s.meal_type === 'lunch' ? 'dejeuner' : 'diner'}`)
+    .join('\n');
 
   const customConstraintsLine = customConstraints.length > 0
     ? `\nContraintes spécifiques du chef à respecter STRICTEMENT : ${customConstraints.join(' / ')}.`
     : '';
 
-  const prompt = `Choisis des repas pour ${span.day_count} jours (${span.start_date} au ${span.end_date}), ${servicesLabel}.
+  const prompt = `Choisis un repas pour CHACUN des ${expectedSlots.length} créneaux ci-dessous (un index de template par créneau, dans l'ordre).
 ${nbPersons} personnes, max ${establishment.budget_per_meal}€/pers/repas.${customConstraintsLine}
 ${feedbackContext}
+
+Créneaux à remplir (slot|date|service):
+${slotsLabel}
 
 Repas disponibles (index|nom|categorie_gemrcn|cout):
 ${filteredTemplateList}
 
 Regles IMPORTANTES:
-- Ne genere que les services demandes (${services.join(', ')})
+- Tu dois renvoyer EXACTEMENT ${expectedSlots.length} indices (un par créneau, dans l'ordre des slots)
 - Ne jamais utiliser la meme proteine sur 4 repas consecutifs (2 jours)
 - Maximiser la variete des proteines sur tout le span
 - La premiere semaine doit couvrir AU MOINS 5 proteines differentes (ne pas piocher toujours les memes au debut)
@@ -191,8 +211,8 @@ Regles IMPORTANTES:
 - Alterner les couts, minimum ${MIN_COST_PER_PERSON}€/pers par repas
 - Privilegier les repas apprecies, eviter les repas mal notes
 - Coherence : eviter de mettre deux plats "lourds" consecutifs (ex: blanquette midi + pot-au-feu soir). Alterner plat chaud/plat froid quand possible
-Reponds UNIQUEMENT avec les index choisis en JSON:
-[${exampleSelections}]`;
+Reponds UNIQUEMENT avec un JSON array de ${expectedSlots.length} entiers (indices de templates), dans l'ordre des slots:
+[12, 7, 33, ...]`;
 
   const message = await client.messages.create({
     model: 'claude-haiku-4-5-20251001',
@@ -206,17 +226,29 @@ Reponds UNIQUEMENT avec les index choisis en JSON:
     throw new Error('Failed to parse suggestions from Claude response');
   }
 
-  let selections: { day_index: number; meal_date: string; meal_type: string; template_index: number }[];
+  // Parse la réponse comme un array d'entiers. Si parsing partiel (réponse tronquée),
+  // on récupère ce qu'on peut.
+  let rawIndices: number[] = [];
   try {
-    selections = JSON.parse(jsonMatch[0]);
+    const parsed = JSON.parse(jsonMatch[0]);
+    if (Array.isArray(parsed)) rawIndices = parsed.filter((n) => Number.isInteger(n));
   } catch {
-    const lastComplete = jsonMatch[0].lastIndexOf('},');
-    if (lastComplete > 0) {
-      selections = JSON.parse(jsonMatch[0].substring(0, lastComplete + 1) + ']');
-    } else {
-      throw new Error('Failed to parse selections JSON');
-    }
+    // Recup partiel : extraire tous les entiers présents dans le JSON tronqué
+    rawIndices = (jsonMatch[0].match(/-?\d+/g) || []).map(Number);
   }
+
+  // Construire les selections en garantissant qu'on a un template pour CHAQUE créneau.
+  // Si Claude en a fourni trop peu, on complète aléatoirement à partir du pool filtré.
+  const selections = expectedSlots.map((slot, i) => {
+    const idx = rawIndices[i];
+    const valid = Number.isInteger(idx) && idx >= 0 && idx < filteredPool.length;
+    return {
+      day_index: slot.day_index,
+      meal_date: slot.meal_date,
+      meal_type: slot.meal_type,
+      template_index: valid ? idx : Math.floor(Math.random() * filteredPool.length),
+    };
+  });
 
   // Post-traitement: corriger les redondances sur 3 niveaux
   // 1. Cartes : pas la même carte sur fenêtre de 4 repas (2 jours)

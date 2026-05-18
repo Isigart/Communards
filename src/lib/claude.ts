@@ -224,7 +224,7 @@ Règles IMPORTANTES :
 - Tu dois renvoyer EXACTEMENT ${expectedSlots.length} repas (un par slot, dans l'ordre)
 - Ne JAMAIS répéter la même protéine sur 4 repas consécutifs (2 jours)
 - Maximiser la variété des protéines : viandes rouges, blanches, volailles, poissons, œufs, végétal — au moins 5 protéines différentes par semaine
-- Au moins 2 repas végétariens par semaine (protéine = nuggets végétal, égrené végétal, tofu, galette céréales, œufs/omelette)
+- Au moins 2 repas végétariens par semaine (protéine = œufs, tofu, ou tout ce qui est is_vegetarien)
 - Varier les féculents : un même féculent (riz, pâtes, pommes de terre, lentilles…) max 2 fois par semaine
 - Varier les légumes : pas le même légume sur 2 repas adjacents
 - Varier les desserts : alterner yaourt / crème dessert / compote / fruit / fromage — pas le même type 3 jours d'affilée

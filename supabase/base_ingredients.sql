@@ -1,7 +1,8 @@
 -- ============================================================
--- BASE INGREDIENTS — catalogue canonique (200 = 50 par catégorie)
+-- BASE INGREDIENTS — catalogue canonique (172 ingrédients raw/stable)
 -- ============================================================
--- 1 ligne = 1 ingrédient "standard" (ex: "Haricots verts").
+-- 1 ligne = 1 ingrédient brut OU produit stable mono-référence
+-- (ex: "Haricots verts", "Yaourt nature"). Pas de plats composés.
 -- Les variantes Metro (HARICOTS VERTS EXTRA FINS, TRES FINS, ...)
 -- sont stockées dans le tableau `aliases`.
 -- Source de vérité pour Claude lors de la génération des repas.
@@ -60,7 +61,6 @@ values
 -- Œufs / produits laitiers cuisinés
 ('Œufs coquille',                 'proteine', '{toutes}', 0.130, 7.30,  false, false, false, true,  true,  '{"OEUF coquille plein air M(53-63g) France les","OEUF dur écalé"}', null),
 ('Œufs liquides entiers',         'proteine', '{toutes}', 0.150, 8.80,  false, false, false, true,  true,  '{"OEUF liquide entier France"}', null),
-('Omelette nature',               'proteine', '{toutes}', 0.150, 14.00, false, false, true,  true,  true,  '{"OMELETTE fraîche nature poules au sol ou plein air","OMELETTE fraîche nature biologique"}', null),
 -- Bœuf
 ('Steak haché 15% MG',            'proteine', '{toutes}', 0.150, 22.00, false, false, false, false, true,  '{"STEAKS HACHES 15% MATIERE GRASSE UE"}', null),
 ('Boule de bœuf 51% VBF',         'proteine', '{toutes}', 0.150, 15.30, false, false, false, false, true,  '{"BOULE DE BOEUF 51% MINIMUM DE VIANDE HACHEE 15% MG UE"}', null),
@@ -82,12 +82,9 @@ values
 ('Filets de poulet',              'proteine', '{toutes}', 0.150, 14.80, false, false, false, false, true,  '{"FILETS OU BLANCS DE POULETS A SEC UE"}', null),
 ('Sauté de poulet',               'proteine', '{toutes}', 0.160, 13.40, false, false, false, false, true,  '{"SAUTE DE POULET A SEC COUPE COUTEAU UE"}', null),
 ('Pilons de poulet',              'proteine', '{toutes}', 0.180, 8.80,  false, false, false, false, true,  '{"PILONS DE POULET A SEC UE"}', null),
-('Ailes de poulet marinées',      'proteine', '{ete}',    0.170, 13.00, false, false, false, false, true,  '{"AILES DE POULET CUITES MARINEES (WINGS)"}', null),
 -- Dindonneau
 ('Sauté de dindonneau',           'proteine', '{toutes}', 0.150, 14.70, false, false, false, false, true,  '{"SAUTE DE DINDONNEAU SANS OS, SANS PEAU, A SEC, COUPE COUTEAU UE"}', null),
 ('Rôti de dindonneau',            'proteine', '{toutes}', 0.150, 12.60, false, false, false, false, true,  '{"ROTI DE DINDONNEAU A SEC 50/50 UE"}', null),
-('Brochettes de dindonneau',      'proteine', '{ete}',    0.165, 14.65, false, false, false, false, true,  '{"BROCHETTES DE DINDONNEAU NATURES  UE"}', null),
-('Paupiettes de dindonneau',      'proteine', '{toutes}', 0.170, 11.40, false, false, false, false, true,  '{"PAUPIETTES DE DINDONNEAU  UE"}', null),
 -- Canard / pintade / lapin
 ('Cuisses de canard',             'proteine', '{automne,hiver}', 0.175, 11.50, false, false, false, false, true,  '{"CUISSES DE CANARD  UE"}', null),
 ('Sauté de canard',               'proteine', '{toutes}', 0.155, 15.80, false, false, false, false, true,  '{"SAUTE DE CANARD COUPE COUTEAU FRANCE"}', null),
@@ -104,18 +101,9 @@ values
 ('Dos de cabillaud',              'proteine', '{toutes}', 0.150, 24.70, false, false, false, false, true,  '{"DOS DE CABILLAUD"}', null),
 ('Filet de saumon',               'proteine', '{toutes}', 0.130, 23.60, false, false, false, false, true,  '{"FILET DE SAUMON SALMO SALAR"}', null),
 ('Lieu noir',                     'proteine', '{toutes}', 0.150, 8.40,  false, false, false, false, true,  '{"LIEU noir"}', null),
-('Paupiettes de poisson blanc',   'proteine', '{toutes}', 0.160, 10.80, false, false, false, false, true,  '{"PAUPIETTE DE POISSON BLANC"}', null),
 ('Cubes de poisson blanc',        'proteine', '{toutes}', 0.150, 11.80, false, false, false, false, true,  '{"CUBES DE POISSON BLANC CRUS SANS ARETES"}', null),
-('Filet de poisson meunière',     'proteine', '{toutes}', 0.130, 16.00, false, true,  false, false, true,  '{"FILET DE POISSON BLANC MEUNIERE"}', null),
--- Plats viande/poisson
-('Lasagnes de saumon',            'proteine', '{toutes}', 0.180, 7.90,  false, true,  true,  false, true,  '{"LASAGNES DE SAUMON"}', null),
-('Lasagnes bolognaises VBF',      'proteine', '{toutes}', 0.180, 9.70,  false, true,  true,  false, true,  '{"LASAGNES BOLOGNAISES VBF"}', null),
--- Volaille panée / vege
-('Nuggets de volaille',           'proteine', '{toutes}', 0.150, 9.20,  false, true,  false, false, true,  '{"NUGGETS (beignets) DE VOLAILLE UE"}', null),
-('Nuggets végétal',               'proteine', '{toutes}', 0.150, 12.50, false, true,  false, true,  true,  '{"NUGGETS VEGETAL"}', null),
-('Égrené végétal nature',         'proteine', '{toutes}', 0.110, 14.60, false, false, false, true,  true,  '{"EGRENE VEGETAL NATURE"}', null),
+-- Vege
 ('Tofu nature',                   'proteine', '{toutes}', 0.120, 9.50,  false, false, false, true,  true,  '{}', null),
-('Galette céréales-légumineuses', 'proteine', '{toutes}', 0.130, 10.00, false, true,  false, true,  true,  '{}', null),
 
 -- ============================================================
 -- FÉCULENTS (50)
@@ -136,15 +124,12 @@ values
 ('Spaghetti',                         'feculent', '{toutes}', 0.090, 2.40, false, true,  false, true, true, '{}', null),
 ('Macaronis',                         'feculent', '{toutes}', 0.090, 2.30, false, true,  false, true, true, '{}', null),
 ('Plaques de lasagnes',               'feculent', '{toutes}', 0.110, 3.00, false, true,  false, true, true, '{}', null),
-('Gnocchis',                          'feculent', '{toutes}', 0.150, 4.20, false, true,  true,  true, true, '{}', null),
 -- Pommes de terre / tubercules
 ('Pommes de terre Charlotte',         'feculent', '{toutes}', 0.200, 1.50, false, false, false, true, true, '{"Pomme de terre Charlotte"}', null),
 ('Pommes de terre grenaille',         'feculent', '{toutes}', 0.200, 2.20, false, false, false, true, true, '{}', null),
 ('Pommes de terre Ratte',             'feculent', '{toutes}', 0.200, 3.50, false, false, false, true, true, '{}', null),
 ('Pommes de terre Bintje',            'feculent', '{toutes}', 0.200, 1.40, false, false, false, true, true, '{}', null),
 ('Patate douce',                      'feculent', '{automne,hiver}', 0.180, 2.50, false, false, false, true, true, '{}', null),
-('Frites',                            'feculent', '{toutes}', 0.150, 3.80, false, false, false, true, true, '{"FRITES 9/9 PRE FRITES LONGUES","FRITES LONGUES AU FOUR"}', null),
-('Purée de pommes de terre',          'feculent', '{toutes}', 0.150, 3.80, false, false, true,  true, true, '{"Purée Pomme de Terre Flocon Complet à froid","PUREE DE POMMES DE TERRE"}', null),
 -- Céréales
 ('Boulgour',                          'feculent', '{toutes}', 0.090, 3.20, false, true,  false, true, true, '{}', null),
 ('Semoule de blé',                    'feculent', '{toutes}', 0.090, 3.30, false, true,  false, true, true, '{"Semoule"}', null),
@@ -224,7 +209,6 @@ values
 -- Racines / tubercules
 ('Navets',                            'legume', '{automne,hiver}', 0.140, 1.80, false, false, false, true, true, '{}', null),
 ('Panais',                            'legume', '{automne,hiver}', 0.140, 3.50, false, false, false, true, true, '{}', null),
-('Betteraves rouges (cuites)',        'legume', '{automne,hiver}', 0.120, 3.20, false, false, false, true, true, '{}', null),
 ('Céleri-rave',                       'legume', '{automne,hiver}', 0.130, 2.50, false, false, false, true, true, '{}', null),
 ('Céleri branche',                    'legume', '{toutes}', 0.100, 2.80, false, false, false, true, true, '{}', null),
 ('Topinambour',                       'legume', '{automne,hiver}', 0.140, 3.80, false, false, false, true, true, '{}', null),
@@ -235,7 +219,6 @@ values
 ('Artichauts',                        'legume', '{printemps,ete}', 0.150, 5.20, false, false, false, true, true, '{}', null),
 ('Blettes',                           'legume', '{printemps,automne}', 0.130, 3.50, false, false, false, true, true, '{}', null),
 ('Maïs doux (grains)',                'legume', '{toutes}', 0.080, 3.20, false, false, false, true, true, '{}', null),
-('Crudités râpées',                   'legume', '{toutes}', 0.100, 4.50, false, false, false, true, true, '{}', null),
 
 -- ============================================================
 -- DESSERTS (50)
@@ -249,17 +232,6 @@ values
 ('Yaourt aux fruits',                 'dessert', '{toutes}', 0.125, 4.50, false, false, true, true, true, '{}', null),
 ('Petit suisse',                      'dessert', '{toutes}', 0.120, 5.20, false, false, true, true, true, '{}', null),
 ('Lait fermenté bifidus',             'dessert', '{toutes}', 0.120, 7.00, false, false, true, true, true, '{"LAIT FERMENTÉ nature au bifidus lait entier pot"}', null),
--- Crèmes et entremets
-('Mousse chocolat',                   'dessert', '{toutes}', 0.115, 6.30, false, false, true, true, true, '{"MOUSSE CHOCOLAT pot"}', null),
-('Crème dessert chocolat',            'dessert', '{toutes}', 0.115, 4.50, false, false, true, true, true, '{"CRÈME DESSERT lait entier crème frai. choco. pot"}', null),
-('Crème dessert vanille',             'dessert', '{toutes}', 0.115, 4.50, false, false, true, true, true, '{}', null),
-('Crème dessert caramel',             'dessert', '{toutes}', 0.115, 4.50, false, false, true, true, true, '{}', null),
-('Crème anglaise',                    'dessert', '{toutes}', 0.100, 2.80, false, false, true, true, true, '{"CRÈME ANGLAISE"}', null),
-('Lait gélifié chocolat',             'dessert', '{toutes}', 0.120, 3.60, false, false, true, true, true, '{"LAIT GÉLIFIÉ chocolat pot"}', null),
-('Liégeois chocolat',                 'dessert', '{toutes}', 0.120, 4.80, false, false, true, true, true, '{}', null),
-('Flan nappé caramel',                'dessert', '{toutes}', 0.120, 4.20, false, false, true, true, true, '{}', null),
-('Riz au lait',                       'dessert', '{toutes}', 0.130, 3.80, false, false, true, true, true, '{}', null),
-('Semoule au lait',                   'dessert', '{toutes}', 0.130, 3.80, false, true,  true, true, true, '{}', null),
 -- Compotes
 ('Compote de pomme',                  'dessert', '{toutes}', 0.115, 2.30, false, false, false, true, true, '{"Compote de pomme  allégée en sucre en coupelle","Compote de pomme  allégée en sucre"}', null),
 ('Compote pomme-poire',               'dessert', '{toutes}', 0.115, 2.50, false, false, false, true, true, '{}', null),
@@ -293,6 +265,4 @@ values
 ('Raisin',                            'dessert', '{ete,automne}', 0.150, 3.80, false, false, false, true, true, '{"Raisin noir"}', null),
 ('Melon',                             'dessert', '{ete}', 0.180, 3.20, false, false, false, true, true, '{}', null),
 ('Pastèque',                          'dessert', '{ete}', 0.200, 1.80, false, false, false, true, true, '{}', null),
-('Ananas frais',                      'dessert', '{toutes}', 0.150, 3.50, false, false, false, true, true, '{}', null),
--- Pâtisseries préparées
-('Salade de fruits',                  'dessert', '{toutes}', 0.130, 4.50, false, false, false, true, true, '{}', null);
+('Ananas frais',                      'dessert', '{toutes}', 0.150, 3.50, false, false, false, true, true, '{}', null);

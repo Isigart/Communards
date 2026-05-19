@@ -60,7 +60,23 @@ export interface Suggestion {
   estimated_cost: number;
   grocery_list: GroceryItem[];
   notes: string | null;
+  /**
+   * Alternatives pour les contraintes "soft" (X personnes sur N).
+   * Ex: 2 véges → ingrédients alternatifs (typiquement la protéine échangée).
+   */
+  alternatives: MealAlternative[];
   created_at: string;
+}
+
+export interface MealAlternative {
+  /** Contrainte qui justifie l'alternative (ex: 'vegetarien', 'sans-porc', 'sans noix') */
+  for_constraint: string;
+  /** Nombre de personnes concernées */
+  count: number;
+  /** Ingrédients du repas alternatif (même structure que Suggestion.ingredients, généralement seule la protéine change) */
+  ingredients: Ingredient[];
+  /** Coût total pour ces `count` personnes */
+  estimated_cost: number;
 }
 
 export interface Ingredient {

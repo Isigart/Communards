@@ -204,6 +204,13 @@ export default function PlanningPage() {
     return s.charAt(0).toUpperCase() + s.slice(1);
   };
 
+  // Renvoie les ingrédients d'une alternative qui DIFFÈRENT du repas principal (typiquement la protéine)
+  const altSwaps = (meal: Suggestion, alt: { ingredients: { name: string; quantity: string; unit: string; category: string }[] }) =>
+    alt.ingredients.filter((a) => {
+      const main = meal.ingredients.find((m) => m.category === a.category);
+      return !main || main.name !== a.name;
+    });
+
   const renderMealCell = (meal: Suggestion | undefined, isPast: boolean) => {
     if (!meal) return null;
     const isExpanded = expandedMeal === meal.id;
@@ -211,6 +218,7 @@ export default function PlanningPage() {
     const costPerPerson = meal.estimated_cost && employeeCount > 0
       ? (meal.estimated_cost / employeeCount)
       : null;
+    const alternatives = meal.alternatives || [];
 
     if (!isExpanded) {
       return (
@@ -246,6 +254,22 @@ export default function PlanningPage() {
               </div>
             );
           })}
+          {alternatives.length > 0 && (
+            <div className="mt-1 pt-1 border-t border-bordure/60 space-y-0.5">
+              {alternatives.map((alt, i) => {
+                const swaps = altSwaps(meal, alt);
+                if (swaps.length === 0) return null;
+                return (
+                  <div key={i} className="flex items-center gap-1 text-[10px] text-rouge/90 leading-snug truncate">
+                    <span className="font-data font-medium shrink-0">×{alt.count}</span>
+                    <span className="text-noir/70 truncate">{alt.for_constraint}</span>
+                    <span className="text-noir/40 shrink-0">→</span>
+                    <span className="text-noir font-medium truncate">{swaps.map((s) => shortName(s.name)).join(' + ')}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
           {meal.notes
             ? <p className="text-[10px] text-noir/50 italic truncate mt-0.5">{meal.notes}</p>
             : !isPast && <p className="text-[10px] text-muted/40 mt-0.5">+ annoter</p>
@@ -283,6 +307,35 @@ export default function PlanningPage() {
         })}
         {costPerPerson !== null && (
           <p className="font-data text-[10px] text-muted mt-1">~{costPerPerson.toFixed(2).replace('.', ',')} €/tête</p>
+        )}
+        {alternatives.length > 0 && (
+          <div className="mt-2 pt-2 border-t border-bordure/60 space-y-1.5">
+            {alternatives.map((alt, ai) => {
+              const swaps = altSwaps(meal, alt);
+              if (swaps.length === 0) return null;
+              return (
+                <div key={ai} className="text-[10px] space-y-0.5">
+                  <div className="flex items-center gap-1">
+                    <span className="font-data text-rouge font-medium">×{alt.count}</span>
+                    <span className="text-noir/70">{alt.for_constraint}</span>
+                    <span className="font-data text-muted ml-auto">~{(alt.estimated_cost / alt.count).toFixed(2).replace('.', ',')} €/tête</span>
+                  </div>
+                  {swaps.map((s, si) => {
+                    const cat = CATEGORY_BADGE[(s.category as string) || ''];
+                    return (
+                      <div key={si} className="flex items-center gap-1 pl-3">
+                        {cat ? (
+                          <span style={{ background: cat.bg, color: cat.fg }} className="text-[8px] font-data font-medium px-1 rounded shrink-0">{cat.label}</span>
+                        ) : <span className="w-3 shrink-0" />}
+                        <span className="text-noir flex-1 truncate">{shortName(s.name)}</span>
+                        <span className="font-data text-muted ml-1 shrink-0">{s.quantity}{s.unit}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })}
+          </div>
         )}
         {meal.notes && !isEditing && (
           <p className="text-[10px] text-noir/60 italic mt-1 cursor-pointer" onClick={() => { setEditingNote(meal.id); setDraftNote(meal.notes || ''); }}>

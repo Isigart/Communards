@@ -381,27 +381,94 @@ Réponds UNIQUEMENT avec un JSON array de ${expectedSlots.length} objets {p,f,l,
     while (recentDessertBuckets.length > 3) recentDessertBuckets.shift();
   }
 
-  // Composer les suggestions finales
+  // === Helpers pour calculer les alternatives par contrainte soft ===
+  // Renvoie true si l'ingrédient respecte la contrainte donnée
+  const isCompatibleWith = (ing: BaseIngredient, constraint: string): boolean => {
+    if (constraint === 'vegetarien') return ing.is_vegetarien;
+    if (constraint === 'sans-porc') return !ing.contains_porc;
+    if (constraint === 'halal') return ing.halal_compatible;
+    if (constraint === 'sans-gluten') return !ing.contains_gluten;
+    if (constraint === 'sans-lactose') return !ing.contains_lactose;
+    // Custom : extraire le mot-clé et vérifier l'absence dans nom/aliases
+    const keyword = constraint
+      .toLowerCase()
+      .replace(/^(sans|pas\s+de|pas\s+d['']|allergique\s+(?:au[xs]?|[àa])?|aller?gie\s+(?:au[xs]?|[àa])?|j['']aime\s+pas|sans\s+les?)\s+/i, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (keyword.length < 3) return true;
+    const haystack = [ing.name.toLowerCase(), ...ing.aliases.map((a) => a.toLowerCase())];
+    return !haystack.some((h) => h.includes(keyword));
+  };
+
+  // Trouve un ingrédient compatible dans la même catégorie (même pool que le main)
+  const findCompatibleSwap = (
+    original: BaseIngredient,
+    constraint: string
+  ): BaseIngredient | null => {
+    const items = byCategory[original.category] as BaseIngredient[];
+    const compatible = items.filter((i) => i.name !== original.name && isCompatibleWith(i, constraint));
+    if (compatible.length === 0) return null;
+    return compatible[Math.floor(Math.random() * compatible.length)];
+  };
+
+  // Composer les suggestions finales + alternatives par contrainte soft
   return picks.map(({ slot, p, f, l, d }) => {
-    const ingredients = [
+    const mainIngs = [
       byCategory.proteine[p],
       byCategory.feculent[f],
       byCategory.legume[l],
       byCategory.dessert[d],
     ];
 
-    const compiledIngredients = ingredients.map((ing) => ({
+    const compiledIngredients = mainIngs.map((ing) => ({
       name: ing.name,
       quantity: (ing.qty_per_person_kg * nbPersons).toFixed(2),
       unit: 'kg',
       category: ing.category,
     }));
 
-    const costPerPerson = ingredients.reduce(
+    const costPerPerson = mainIngs.reduce(
       (sum, ing) => sum + ing.qty_per_person_kg * (ing.price_per_kg_ht ?? 0),
       0
     );
     const totalCost = Math.round(costPerPerson * nbPersons * 100) / 100;
+
+    // Pour chaque contrainte soft, calculer une alternative si nécessaire
+    const alternatives: { for_constraint: string; count: number; ingredients: { name: string; quantity: string; unit: string; category: string }[]; estimated_cost: number }[] = [];
+
+    for (const note of softNotes) {
+      const alreadyCompatible = mainIngs.every((ing) => isCompatibleWith(ing, note.name));
+      if (alreadyCompatible) continue;
+
+      // Pour chaque ingrédient incompatible, chercher un swap dans la même catégorie
+      const altIngs = mainIngs.map((ing) => {
+        if (isCompatibleWith(ing, note.name)) return ing;
+        return findCompatibleSwap(ing, note.name) || ing; // garde le main si aucune alternative dispo
+      });
+
+      // Si aucun swap n'a réussi (toutes les substitutions échouent), skip
+      const swapped = altIngs.some((ing, idx) => ing.name !== mainIngs[idx].name);
+      if (!swapped) continue;
+
+      const altCompiled = altIngs.map((ing) => ({
+        name: ing.name,
+        quantity: (ing.qty_per_person_kg * note.count).toFixed(2),
+        unit: 'kg',
+        category: ing.category,
+      }));
+      const altCostPerPerson = altIngs.reduce(
+        (sum, ing) => sum + ing.qty_per_person_kg * (ing.price_per_kg_ht ?? 0),
+        0
+      );
+      const altTotal = Math.round(altCostPerPerson * note.count * 100) / 100;
+
+      alternatives.push({
+        for_constraint: note.name,
+        count: note.count,
+        ingredients: altCompiled,
+        estimated_cost: altTotal,
+      });
+    }
 
     return {
       day_index: slot.day_index,
@@ -411,6 +478,7 @@ Réponds UNIQUEMENT avec un JSON array de ${expectedSlots.length} objets {p,f,l,
       estimated_cost: totalCost,
       grocery_list: [],
       notes: null,
+      alternatives,
     };
   });
 }

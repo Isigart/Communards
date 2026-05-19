@@ -1,5 +1,5 @@
 -- ============================================================
--- BASE INGREDIENTS — catalogue canonique (99 ingrédients)
+-- BASE INGREDIENTS — catalogue canonique (103 ingrédients)
 -- ============================================================
 -- Niveau de granularité : ce que le chef écrit sur sa liste de courses.
 -- Pas de plats composés. Pas de variantes Metro (calibres, % MG, etc.) —
@@ -92,6 +92,10 @@ values
 -- Œufs + végétal
 ('Œufs',                  'proteine', '{toutes}', 0.130, 7.30,  false, false, false, true,  true,  '{"OEUF coquille plein air M(53-63g) France les","OEUF dur écalé","OEUF dur écalé <","OEUF liquide entier France","Œufs coquille","Œufs liquides entiers"}', null),
 ('Tofu nature',           'proteine', '{toutes}', 0.120, 9.50,  false, false, false, true,  true,  '{}', null),
+('Tofu fumé',             'proteine', '{toutes}', 0.120, 11.00, false, false, false, true,  true,  '{}', 'Tofu fumé (goût plus marqué que le nature, à poêler ou en émincé)'),
+('Tempeh',                'proteine', '{toutes}', 0.120, 13.00, false, false, false, true,  true,  '{}', 'Soja fermenté en bloc, texture ferme — sauter, mariner, griller'),
+('Seitan',                'proteine', '{toutes}', 0.140, 12.00, false, true,  false, true,  true,  '{}', 'À base de gluten de blé — contient du gluten. Texture proche de la viande.'),
+('Protéines végétales texturées', 'proteine', '{toutes}', 0.080, 8.00, false, false, false, true, true, '{"PVT","Protéine de soja","Soja texturé"}', 'Sec, à hydrater (×3 son poids). 80g sec/pers ≈ 240g hydraté. Bolo végé, chili sin carne, etc.'),
 
 -- ============================================================
 -- FÉCULENTS (16)

@@ -24,6 +24,8 @@ interface BaseIngredient {
   id: string;
   name: string;
   category: 'proteine' | 'feculent' | 'legume' | 'dessert';
+  /** Catégorie GEMRCN (recommandations nutritionnelles collectivité) — null pour les ingrédients sans règle (féculents, légumes) */
+  categorie_gemrcn: string | null;
   saison: string[];
   qty_per_person_kg: number;
   price_per_kg_ht: number | null;
@@ -159,8 +161,12 @@ export async function generateSuggestions(input: GenerateInput): Promise<Omit<Su
   }
 
   // Construire les listes compactes pour Claude
+  // Format : index|nom|catégorie GEMRCN (si applicable)|prix HT/kg
   const formatList = (items: BaseIngredient[]): string =>
-    items.map((i, idx) => `${idx}|${i.name}|${(i.price_per_kg_ht ?? 0).toFixed(2)}€/kg`).join('\n');
+    items.map((i, idx) => {
+      const cat = i.categorie_gemrcn ? `|${i.categorie_gemrcn}` : '|';
+      return `${idx}|${i.name}${cat}|${(i.price_per_kg_ht ?? 0).toFixed(2)}€/kg`;
+    }).join('\n');
 
   // Planning par jour : lunch_days + dinner_days (0=Dim, 1=Lun, ..., 6=Sam)
   // Fallback legacy : si pas définis, déduire de services (= comportement "tous les jours")
@@ -246,11 +252,28 @@ export async function generateSuggestions(input: GenerateInput): Promise<Omit<Su
     : '';
 
   const dessertSection = includeDessert
-    ? `\n\nDESSERTS disponibles (index|nom|prix HT/kg):\n${formatList(byCategory.dessert)}`
+    ? `\n\nDESSERTS disponibles (index|nom|catégorie GEMRCN|prix HT/kg):\n${formatList(byCategory.dessert)}`
     : '';
   const dessertVarietyRule = includeDessert
-    ? "\n- Varier les desserts : alterner yaourt / crème dessert / compote / fruit / fromage — pas le même type 3 jours d'affilée"
+    ? "\n- Varier les desserts : alterner laitier_calcique / fromage_calcique_haut / fruit_cru / dessert_sucre — pas le même type 3 jours d'affilée"
     : '';
+
+  // Calcul des objectifs GEMRCN (référence : fenêtre 20 repas) ajustés au nombre de repas du span
+  const N = expectedSlots.length;
+  const gemrcnTarget = (perTwenty: number) => Math.max(1, Math.round((perTwenty / 20) * N));
+  const dessertGemrcnTargets = includeDessert
+    ? `\n  • ≥${gemrcnTarget(8)} fruits crus (fruit_cru)`
+      + `\n  • ≥${gemrcnTarget(6)} laitages (laitier_calcique : yaourt/fromage blanc/petit suisse)`
+      + `\n  • Présence de fromage à pâte pressée (fromage_calcique_haut) — au moins 1 fois si possible`
+      + `\n  • ≤${gemrcnTarget(4)} desserts sucrés (compote)`
+    : '';
+  const gemrcnSection = `
+
+Recommandations nutritionnelles GEMRCN (sur ${N} repas, équilibre à viser) :
+  • ≥${gemrcnTarget(4)} viandes non hachées (viande_non_hachee — pas le haché reconstitué)
+  • ≥${gemrcnTarget(4)} poissons maigres (poisson_maigre : Cabillaud, Colin)
+  • Inclure aussi ≥1 poisson gras (poisson_gras : Saumon, Truite, Maquereau, Sardines) — apport oméga-3${dessertGemrcnTargets}
+La catégorie GEMRCN apparaît dans les listes ci-dessous — utilise-la pour équilibrer.`;
   const composition = includeDessert
     ? '1 protéine + 1 féculent + 1 légume + 1 dessert'
     : '1 protéine + 1 féculent + 1 légume (pas de dessert)';
@@ -268,14 +291,14 @@ ${feedbackContext}
 Créneaux à remplir (slot|date|service):
 ${slotsLabel}
 
-PROTÉINES disponibles (index|nom|prix HT/kg):
+PROTÉINES disponibles (index|nom|catégorie GEMRCN|prix HT/kg):
 ${formatList(byCategory.proteine)}
 
-FÉCULENTS disponibles (index|nom|prix HT/kg):
+FÉCULENTS disponibles (index|nom||prix HT/kg):
 ${formatList(byCategory.feculent)}
 
-LÉGUMES disponibles (index|nom|prix HT/kg):
-${formatList(byCategory.legume)}${dessertSection}
+LÉGUMES disponibles (index|nom||prix HT/kg):
+${formatList(byCategory.legume)}${dessertSection}${gemrcnSection}
 
 Règles IMPORTANTES :
 - Tu dois renvoyer EXACTEMENT ${expectedSlots.length} repas (un par slot, dans l'ordre)

@@ -23,6 +23,11 @@ export interface Establishment {
    * 0 < count < employee_count → informatif (note au chef, pas de filtre).
    */
   dietary_counts: Record<string, number>;
+  /**
+   * Inclure ou non un dessert dans chaque repas. Default: true (comportement legacy).
+   * Quand false, chaque repas = protéine + féculent + légume (3 composants).
+   */
+  include_dessert: boolean;
   planning_days: number;
   created_at: string;
   updated_at: string;

@@ -47,6 +47,7 @@ export async function POST(req: NextRequest) {
       services: body.services || ['lunch'],
       dietary_constraints: dietaryConstraints,
       dietary_counts: dietaryCounts,
+      include_dessert: typeof body.include_dessert === 'boolean' ? body.include_dessert : true,
     })
     .select()
     .single();

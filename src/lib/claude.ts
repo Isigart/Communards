@@ -49,6 +49,7 @@ function classifyDessert(name: string): string | null {
 export async function generateSuggestions(input: GenerateInput): Promise<Omit<Suggestion, 'id' | 'span_id' | 'establishment_id' | 'created_at'>[]> {
   const { establishment, span, pastFeedback } = input;
   const nbPersons = establishment.employee_count;
+  const includeDessert = establishment.include_dessert !== false; // default true (legacy)
   const supabase = createServerClient();
   const currentSaison = getCurrentSaison();
 
@@ -142,8 +143,11 @@ export async function generateSuggestions(input: GenerateInput): Promise<Omit<Su
     dessert:  pool.filter((i) => i.category === 'dessert'),
   };
 
-  // Vérifier qu'on a au moins 1 ingrédient par catégorie
-  for (const cat of ['proteine', 'feculent', 'legume', 'dessert'] as const) {
+  // Vérifier qu'on a au moins 1 ingrédient par catégorie utilisée
+  const requiredCats: ('proteine' | 'feculent' | 'legume' | 'dessert')[] = includeDessert
+    ? ['proteine', 'feculent', 'legume', 'dessert']
+    : ['proteine', 'feculent', 'legume'];
+  for (const cat of requiredCats) {
     if (byCategory[cat].length === 0) {
       throw new Error(`Pool ${cat} vide après contraintes strictes [${[...strictKnown, ...strictCustom].join(', ')}]. Élargis les contraintes ou seed plus d'ingrédients.`);
     }
@@ -230,8 +234,24 @@ export async function generateSuggestions(input: GenerateInput): Promise<Omit<Su
     ? `\n\nÀ noter sur l'équipe (${nbPersons} personnes) : ${softNotes.map((n) => `${n.count} ${n.name}`).join(', ')}. Quand c'est possible sans contrainte forte, privilégie un plat compatible avec tout le monde (un plat végétarien convient à tous, un plat sans porc aussi). Sinon le chef prévoit une option à côté — pas besoin d'éviter à tout prix.`
     : '';
 
+  const dessertSection = includeDessert
+    ? `\n\nDESSERTS disponibles (index|nom|prix HT/kg):\n${formatList(byCategory.dessert)}`
+    : '';
+  const dessertVarietyRule = includeDessert
+    ? "\n- Varier les desserts : alterner yaourt / crème dessert / compote / fruit / fromage — pas le même type 3 jours d'affilée"
+    : '';
+  const composition = includeDessert
+    ? '1 protéine + 1 féculent + 1 légume + 1 dessert'
+    : '1 protéine + 1 féculent + 1 légume (pas de dessert)';
+  const responseShape = includeDessert
+    ? `${expectedSlots.length} objets {p,f,l,d} (indices de protéine, féculent, légume, dessert)`
+    : `${expectedSlots.length} objets {p,f,l} (indices de protéine, féculent, légume)`;
+  const responseExample = includeDessert
+    ? `[{"p":0,"f":3,"l":7,"d":2},{"p":5,"f":1,"l":12,"d":4},...]`
+    : `[{"p":0,"f":3,"l":7},{"p":5,"f":1,"l":12},...]`;
+
   const prompt = `Tu composes ${expectedSlots.length} repas pour ${nbPersons} personnes, budget max ${establishment.budget_per_meal}€/pers/repas.${customConstraintsLine}${softNotesLine}
-Chaque repas = 1 protéine + 1 féculent + 1 légume + 1 dessert (index dans les listes ci-dessous).
+Chaque repas = ${composition} (index dans les listes ci-dessous).
 ${feedbackContext}
 
 Créneaux à remplir (slot|date|service):
@@ -244,10 +264,7 @@ FÉCULENTS disponibles (index|nom|prix HT/kg):
 ${formatList(byCategory.feculent)}
 
 LÉGUMES disponibles (index|nom|prix HT/kg):
-${formatList(byCategory.legume)}
-
-DESSERTS disponibles (index|nom|prix HT/kg):
-${formatList(byCategory.dessert)}
+${formatList(byCategory.legume)}${dessertSection}
 
 Règles IMPORTANTES :
 - Tu dois renvoyer EXACTEMENT ${expectedSlots.length} repas (un par slot, dans l'ordre)
@@ -255,14 +272,13 @@ Règles IMPORTANTES :
 - Maximiser la variété des protéines : viandes rouges, blanches, volailles, poissons, œufs, végétal — au moins 5 protéines différentes par semaine
 - Au moins 2 repas végétariens par semaine (protéine = œufs, tofu, ou tout ce qui est is_vegetarien)
 - Varier les féculents : un même féculent (riz, pâtes, pommes de terre, lentilles…) max 2 fois par semaine
-- Varier les légumes : pas le même légume sur 2 repas adjacents
-- Varier les desserts : alterner yaourt / crème dessert / compote / fruit / fromage — pas le même type 3 jours d'affilée
+- Varier les légumes : pas le même légume sur 2 repas adjacents${dessertVarietyRule}
 - Cohérence : éviter deux plats lourds consécutifs (ex : bourguignon midi + pot-au-feu soir)
 - Respecter la saison : les ingrédients listés sont déjà filtrés pour la saison courante (${currentSaison})
 - Privilégier les repas appréciés, éviter les repas mal notés
 
-Réponds UNIQUEMENT avec un JSON array de ${expectedSlots.length} objets {p,f,l,d} (indices de protéine, féculent, légume, dessert), dans l'ordre des slots :
-[{"p":0,"f":3,"l":7,"d":2},{"p":5,"f":1,"l":12,"d":4},...]`;
+Réponds UNIQUEMENT avec un JSON array de ${responseShape}, dans l'ordre des slots :
+${responseExample}`;
 
   const message = await client.messages.create({
     model: 'claude-haiku-4-5-20251001',
@@ -303,7 +319,7 @@ Réponds UNIQUEMENT avec un JSON array de ${expectedSlots.length} objets {p,f,l,
       p: safeIdx(raw.p, 'proteine'),
       f: safeIdx(raw.f, 'feculent'),
       l: safeIdx(raw.l, 'legume'),
-      d: safeIdx(raw.d, 'dessert'),
+      d: includeDessert ? safeIdx(raw.d, 'dessert') : -1, // -1 = pas de dessert utilisé
     };
   });
 
@@ -346,9 +362,6 @@ Réponds UNIQUEMENT avec un JSON array de ${expectedSlots.length} objets {p,f,l,
   for (let i = 0; i < picks.length; i++) {
     const pk = picks[i];
     const proteine = byCategory.proteine[pk.p];
-    const feculent = byCategory.feculent[pk.f];
-    const legume = byCategory.legume[pk.l];
-    const dessert = byCategory.dessert[pk.d];
 
     // Vérifier protéine (fenêtre 4)
     if (recentProteines.includes(proteine.name)) {
@@ -362,18 +375,23 @@ Réponds UNIQUEMENT avec un JSON array de ${expectedSlots.length} objets {p,f,l,
     if (recentLegumes.includes(byCategory.legume[pk.l].name)) {
       pk.l = pickAlternative('legume', pk.l, recentLegumes);
     }
-    // Vérifier dessert (fenêtre 3 buckets)
-    const dessertBucket = classifyDessert(dessert.name);
-    if (dessertBucket && recentDessertBuckets.includes(dessertBucket)) {
-      pk.d = pickAlternative('dessert', pk.d, [], recentDessertBuckets);
+    // Vérifier dessert (fenêtre 3 buckets) — seulement si dessert activé
+    if (includeDessert && pk.d >= 0) {
+      const dessert = byCategory.dessert[pk.d];
+      const dessertBucket = classifyDessert(dessert.name);
+      if (dessertBucket && recentDessertBuckets.includes(dessertBucket)) {
+        pk.d = pickAlternative('dessert', pk.d, [], recentDessertBuckets);
+      }
     }
 
     // Mettre à jour les fenêtres avec les choix finaux
     recentProteines.push(byCategory.proteine[pk.p].name);
     recentFeculents.push(byCategory.feculent[pk.f].name);
     recentLegumes.push(byCategory.legume[pk.l].name);
-    const finalDessertBucket = classifyDessert(byCategory.dessert[pk.d].name);
-    if (finalDessertBucket) recentDessertBuckets.push(finalDessertBucket);
+    if (includeDessert && pk.d >= 0) {
+      const finalDessertBucket = classifyDessert(byCategory.dessert[pk.d].name);
+      if (finalDessertBucket) recentDessertBuckets.push(finalDessertBucket);
+    }
 
     while (recentProteines.length > 4) recentProteines.shift();
     while (recentFeculents.length > 12) recentFeculents.shift();
@@ -413,12 +431,12 @@ Réponds UNIQUEMENT avec un JSON array de ${expectedSlots.length} objets {p,f,l,
 
   // Composer les suggestions finales + alternatives par contrainte soft
   return picks.map(({ slot, p, f, l, d }) => {
-    const mainIngs = [
+    const mainIngs: BaseIngredient[] = [
       byCategory.proteine[p],
       byCategory.feculent[f],
       byCategory.legume[l],
-      byCategory.dessert[d],
     ];
+    if (includeDessert && d >= 0) mainIngs.push(byCategory.dessert[d]);
 
     const compiledIngredients = mainIngs.map((ing) => ({
       name: ing.name,

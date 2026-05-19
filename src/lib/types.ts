@@ -14,7 +14,15 @@ export interface Establishment {
   currency: string;
   language: string;
   services: string[];
+  /** Legacy : liste plate des contraintes actives. Dérivée de dietary_counts (clés avec count > 0). */
   dietary_constraints: string[];
+  /**
+   * Compte de personnes concernées par chaque contrainte.
+   * Ex: { vegetarien: 2 } sur 10 employés = 2 personnes véges, les 8 autres mangent de tout.
+   * count == employee_count → contrainte stricte (filtre les ingrédients).
+   * 0 < count < employee_count → informatif (note au chef, pas de filtre).
+   */
+  dietary_counts: Record<string, number>;
   planning_days: number;
   created_at: string;
   updated_at: string;
@@ -52,7 +60,23 @@ export interface Suggestion {
   estimated_cost: number;
   grocery_list: GroceryItem[];
   notes: string | null;
+  /**
+   * Alternatives pour les contraintes "soft" (X personnes sur N).
+   * Ex: 2 véges → ingrédients alternatifs (typiquement la protéine échangée).
+   */
+  alternatives: MealAlternative[];
   created_at: string;
+}
+
+export interface MealAlternative {
+  /** Contrainte qui justifie l'alternative (ex: 'vegetarien', 'sans-porc', 'sans noix') */
+  for_constraint: string;
+  /** Nombre de personnes concernées */
+  count: number;
+  /** Ingrédients du repas alternatif (même structure que Suggestion.ingredients, généralement seule la protéine change) */
+  ingredients: Ingredient[];
+  /** Coût total pour ces `count` personnes */
+  estimated_cost: number;
 }
 
 export interface Ingredient {

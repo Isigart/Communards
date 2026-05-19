@@ -10,12 +10,6 @@ interface GenerateInput {
   pastFeedback: Feedback[];
 }
 
-function getCurrentMonth(): string {
-  // v3: schema utilise les mois sans accents (matches saison TEXT[] CHECK constraint)
-  const months = ['janvier', 'fevrier', 'mars', 'avril', 'mai', 'juin', 'juillet', 'aout', 'septembre', 'octobre', 'novembre', 'decembre'];
-  return months[new Date().getMonth()];
-}
-
 function getCurrentSaison(): string {
   // Saison large pour matcher saison: ['ete'] / ['hiver'] etc.
   const m = new Date().getMonth() + 1;
@@ -25,69 +19,107 @@ function getCurrentSaison(): string {
   return 'automne';
 }
 
+// Représente une ligne de base_ingredients
+interface BaseIngredient {
+  id: string;
+  name: string;
+  category: 'proteine' | 'feculent' | 'legume' | 'dessert';
+  saison: string[];
+  qty_per_person_kg: number;
+  price_per_kg_ht: number | null;
+  contains_porc: boolean;
+  contains_gluten: boolean;
+  contains_lactose: boolean;
+  is_vegetarien: boolean;
+  halal_compatible: boolean;
+  aliases: string[];
+  active: boolean;
+}
+
+// Classifie un dessert dans 5 buckets pour rotation (yaourt/crème/compote/fruit/fromage)
+function classifyDessert(name: string): string | null {
+  const s = (name || '').toLowerCase();
+  if (/yaourt|fromage\s+blanc|petit\s+suisse|lait\s+fermenté/.test(s)) return 'yaourt';
+  if (/cr[èe]me\s+(dessert|anglaise)|mousse|flan|li[ée]geois|lait\s+g[ée]lifi[ée]|riz\s+au\s+lait|semoule\s+au\s+lait/.test(s)) return 'creme';
+  if (/compote/.test(s)) return 'compote';
+  if (/comt[ée]|emmental|brie|camembert|tomme|reblochon|munster|roquefort|bleu|ch[èe]vre|cantal|fromage/.test(s)) return 'fromage';
+  return 'fruit'; // pomme, banane, etc.
+}
+
 export async function generateSuggestions(input: GenerateInput): Promise<Omit<Suggestion, 'id' | 'span_id' | 'establishment_id' | 'created_at'>[]> {
   const { establishment, span, pastFeedback } = input;
   const nbPersons = establishment.employee_count;
-  const currentMonth = getCurrentMonth();
-
-  // v3: charger templates du mois courant via colonne 'saison' TEXT[]
-  // saison contient soit ['toutes'] soit ['printemps','ete',...] soit ['mai','juin',...]
   const supabase = createServerClient();
   const currentSaison = getCurrentSaison();
-  const { data: templatesMonth, error: seasonErr } = await supabase
-    .from('meal_templates')
+
+  // Charger base_ingredients actifs, filtrés par saison
+  const { data: ingredientsRaw, error: ingErr } = await supabase
+    .from('base_ingredients')
     .select('*')
-    .or(`saison.cs.{${currentMonth}},saison.cs.{${currentSaison}},saison.cs.{toutes}`);
-  const templates = templatesMonth;
+    .eq('active', true)
+    .or(`saison.cs.{${currentSaison}},saison.cs.{toutes}`);
 
-  const MIN_COST_PER_PERSON = 2.00;
-
-  // Si pas de templates pour la saison, fallback sur tous
-  const { data: allTemplatesRaw, error: allErr } = await supabase.from('meal_templates').select('*');
-  const totalCount = allTemplatesRaw?.length || 0;
-  const allTemplates = templates && templates.length > 0 ? templates : (allTemplatesRaw || []);
-
-  if (allTemplates.length === 0) {
-    const errInfo = allErr ? ` | allErr: ${allErr.message} (${allErr.code})` : '';
-    const seasonInfo = seasonErr ? ` | seasonErr: ${seasonErr.message}` : '';
-    throw new Error(`No meal templates in database (total: ${totalCount}, month: ${currentMonth}).${errInfo}${seasonInfo}`);
+  if (ingErr) {
+    throw new Error(`Failed to load base_ingredients: ${ingErr.message}`);
   }
 
-  // Filtrer les repas en dessous du plancher
-  const afterCost = allTemplates.filter((t: Record<string, unknown>) =>
-    (t.estimated_cost_per_person as number) >= MIN_COST_PER_PERSON
-  );
-  // Si le filtre de cout vide tout, on garde tout (templates probablement mal price)
-  let pool = afterCost.length > 0 ? afterCost : allTemplates;
+  // Si pas d'ingrédients pour la saison, fallback sur tous (au cas où la table soit mal seedée)
+  let pool: BaseIngredient[] = (ingredientsRaw as BaseIngredient[] | null) || [];
+  if (pool.length === 0) {
+    const { data: allIng } = await supabase
+      .from('base_ingredients')
+      .select('*')
+      .eq('active', true);
+    pool = (allIng as BaseIngredient[] | null) || [];
+  }
 
-  // Filtrer selon les contraintes alimentaires
-  const constraints: string[] = establishment.dietary_constraints || [];
-  const beforeDietary = pool.length;
+  if (pool.length === 0) {
+    throw new Error('No base_ingredients in database. Seed `supabase/base_ingredients.sql` first.');
+  }
 
-  // Sépare les contraintes "câblées" (booléens en base) des contraintes en texte libre
-  const KNOWN_CONSTRAINTS = ['vegetarien', 'sans-porc', 'halal', 'sans-gluten', 'sans-lactose'];
-  const knownConstraints = constraints.filter((c) => KNOWN_CONSTRAINTS.includes(c));
-  const customConstraints = constraints.filter((c) => !KNOWN_CONSTRAINTS.includes(c) && c.trim().length > 0);
+  // === Contraintes alimentaires par nombre de personnes concernées ===
+  // dietary_counts est source de vérité ({ contrainte: count }).
+  // Si vide, fallback sur dietary_constraints (legacy, traité comme "toute l'équipe").
+  // Règle : count == employee_count → filtre strict, sinon informatif au prompt.
+  const counts: Record<string, number> = (establishment.dietary_counts as Record<string, number> | undefined) || {};
+  if (Object.keys(counts).length === 0 && establishment.dietary_constraints) {
+    for (const c of establishment.dietary_constraints) counts[c] = nbPersons;
+  }
 
-  if (knownConstraints.length > 0) {
-    pool = pool.filter((t: Record<string, unknown>) => {
-      const containsPorc = (t.contains_porc as boolean) || false;
-      const containsGluten = (t.contains_gluten as boolean) || false;
-      const isVege = (t.is_vegetarien as boolean) || false;
-      if (knownConstraints.includes('vegetarien') && !isVege) return false;
-      if (knownConstraints.includes('sans-porc') && containsPorc) return false;
-      if (knownConstraints.includes('halal') && !(t.halal_compatible as boolean)) return false;
-      if (knownConstraints.includes('sans-gluten') && containsGluten) return false;
-      if (knownConstraints.includes('sans-lactose') && (t.contains_lactose as boolean)) return false;
+  const KNOWN_CONSTRAINTS = new Set(['vegetarien', 'sans-porc', 'halal', 'sans-gluten', 'sans-lactose']);
+  const strictKnown: string[] = [];
+  const strictCustom: string[] = [];
+  const softNotes: { name: string; count: number }[] = [];
+
+  for (const [name, rawCount] of Object.entries(counts)) {
+    const c = Number(rawCount) || 0;
+    if (c <= 0) continue;
+    if (c >= nbPersons) {
+      // Toute l'équipe → filtre strict
+      if (KNOWN_CONSTRAINTS.has(name)) strictKnown.push(name);
+      else if (name.trim().length > 0) strictCustom.push(name);
+    } else {
+      // Minorité → informatif (le chef gère côté cuisine)
+      softNotes.push({ name, count: c });
+    }
+  }
+
+  // Filtre strict pour les contraintes connues (toute l'équipe)
+  if (strictKnown.length > 0) {
+    pool = pool.filter((ing) => {
+      if (strictKnown.includes('vegetarien') && !ing.is_vegetarien) return false;
+      if (strictKnown.includes('sans-porc') && ing.contains_porc) return false;
+      if (strictKnown.includes('halal') && !ing.halal_compatible) return false;
+      if (strictKnown.includes('sans-gluten') && ing.contains_gluten) return false;
+      if (strictKnown.includes('sans-lactose') && ing.contains_lactose) return false;
       return true;
     });
   }
 
-  // Contraintes custom : on extrait le mot-clé et on exclut les cartes qui le contiennent
-  // Ex: "sans poireau", "pas de chèvre", "allergique aux noix" → keyword = poireau / chèvre / noix
-  type V3IngType = { name: string; quantity_kg?: number; price_ht_kg?: number; category?: string };
+  // Contraintes custom strictes : extraire le mot-clé et exclure les ingrédients
+  // qui le contiennent (dans le nom canonique ou les aliases).
   const customKeywords: string[] = [];
-  for (const constraint of customConstraints) {
+  for (const constraint of strictCustom) {
     const keyword = constraint
       .toLowerCase()
       .replace(/^(sans|pas\s+de|pas\s+d['']|allergique\s+(?:au[xs]?|[àa])?|aller?gie\s+(?:au[xs]?|[àa])?|j['']aime\s+pas|sans\s+les?)\s+/i, '')
@@ -96,29 +128,66 @@ export async function generateSuggestions(input: GenerateInput): Promise<Omit<Su
     if (keyword.length >= 3) customKeywords.push(keyword);
   }
   if (customKeywords.length > 0) {
-    pool = pool.filter((t: Record<string, unknown>) => {
-      const ingNames = ((t.ingredients as V3IngType[]) || []).map((i) => (i.name || '').toLowerCase());
-      const cardName = ((t.name as string) || '').toLowerCase();
-      // Une carte est exclue si l'un de ses ingrédients (ou son nom) contient un mot-clé custom
-      return !customKeywords.some((kw) =>
-        cardName.includes(kw) || ingNames.some((n) => n.includes(kw))
-      );
+    pool = pool.filter((ing) => {
+      const haystack = [ing.name.toLowerCase(), ...ing.aliases.map((a) => a.toLowerCase())];
+      return !customKeywords.some((kw) => haystack.some((h) => h.includes(kw)));
     });
   }
 
-  if (pool.length === 0) {
-    throw new Error(`Pool vide apres contraintes [${constraints.join(', ')}]. ${beforeDietary} templates avant filtrage dietetique, total en base: ${totalCount}, mois: ${currentMonth}.`);
+  // Séparer le pool en 4 sous-pools par catégorie
+  const byCategory = {
+    proteine: pool.filter((i) => i.category === 'proteine'),
+    feculent: pool.filter((i) => i.category === 'feculent'),
+    legume:   pool.filter((i) => i.category === 'legume'),
+    dessert:  pool.filter((i) => i.category === 'dessert'),
+  };
+
+  // Vérifier qu'on a au moins 1 ingrédient par catégorie
+  for (const cat of ['proteine', 'feculent', 'legume', 'dessert'] as const) {
+    if (byCategory[cat].length === 0) {
+      throw new Error(`Pool ${cat} vide après contraintes strictes [${[...strictKnown, ...strictCustom].join(', ')}]. Élargis les contraintes ou seed plus d'ingrédients.`);
+    }
   }
 
-  // Construire la liste compacte des repas disponibles
-  const templateList = pool.map((t: Record<string, unknown>, i: number) =>
-    `${i}|${t.name}|${t.categorie_gemrcn}|${(t.estimated_cost_per_person as number)?.toFixed(2)}€`
-  ).join('\n');
+  // Mélanger pour ne pas suggérer toujours les mêmes en début
+  for (const cat of Object.keys(byCategory) as (keyof typeof byCategory)[]) {
+    byCategory[cat] = byCategory[cat].sort(() => Math.random() - 0.5);
+  }
 
-  // Construire le contexte feedback avec les noms des repas et les commentaires de l'user
+  // Construire les listes compactes pour Claude
+  const formatList = (items: BaseIngredient[]): string =>
+    items.map((i, idx) => `${idx}|${i.name}|${(i.price_per_kg_ht ?? 0).toFixed(2)}€/kg`).join('\n');
+
+  // Déterminer les services
+  const services = (establishment.services && establishment.services.length > 0)
+    ? establishment.services
+    : ['lunch', 'dinner'];
+  const servicesLabel = services.length === 2
+    ? 'dejeuner + diner chaque jour'
+    : services[0] === 'lunch' ? 'dejeuner uniquement' : 'diner uniquement';
+
+  // Pré-calculer la liste exacte des créneaux à remplir
+  const expectedSlots: { day_index: number; meal_date: string; meal_type: 'lunch' | 'dinner' }[] = [];
+  const spanStart = new Date(span.start_date + 'T12:00:00');
+  for (let d = 0; d < span.day_count; d++) {
+    const date = new Date(spanStart);
+    date.setDate(date.getDate() + d);
+    const yyyy = date.getFullYear();
+    const mm = String(date.getMonth() + 1).padStart(2, '0');
+    const dd = String(date.getDate()).padStart(2, '0');
+    const dateStr = `${yyyy}-${mm}-${dd}`;
+    for (const s of services) {
+      expectedSlots.push({ day_index: d, meal_date: dateStr, meal_type: s as 'lunch' | 'dinner' });
+    }
+  }
+
+  const slotsLabel = expectedSlots
+    .map((s, i) => `${i}|${s.meal_date}|${s.meal_type === 'lunch' ? 'dejeuner' : 'diner'}`)
+    .join('\n');
+
+  // Feedback context
   let feedbackContext = '';
   if (pastFeedback.length > 0) {
-    // Charger les suggestions associees aux feedbacks
     const feedbackSuggestionIds = pastFeedback.map(f => f.suggestion_id).filter(Boolean);
     let feedbackSuggestions: Record<string, unknown>[] = [];
     if (feedbackSuggestionIds.length > 0) {
@@ -143,76 +212,57 @@ export async function generateSuggestions(input: GenerateInput): Promise<Omit<Su
     const skipped = pastFeedback.filter(f => f.status === 'skipped').map(summarize).filter(Boolean);
 
     if (liked.length > 0) feedbackContext += `\nRepas réussis (faire +): ${liked.join(' | ')}`;
-    if (modified.length > 0) feedbackContext += `\nRepas adaptés par l'user (la base est OK mais voir commentaires): ${modified.join(' | ')}`;
+    if (modified.length > 0) feedbackContext += `\nRepas adaptés par l'user (voir commentaires): ${modified.join(' | ')}`;
     if (skipped.length > 0) feedbackContext += `\nRepas évités (à ne pas reproposer, voir commentaires): ${skipped.join(' | ')}`;
     if (modified.length > 0 || skipped.length > 0) {
-      feedbackContext += `\n\nLis attentivement les commentaires entre [crochets] : ils contiennent les vraies préférences du chef. Évite les patterns critiqués.`;
+      feedbackContext += `\n\nLis attentivement les commentaires entre [crochets] : ils contiennent les vraies préférences du chef.`;
     }
   }
 
-  // Determiner les services a generer
-  const services = (establishment.services && establishment.services.length > 0)
-    ? establishment.services
-    : ['lunch', 'dinner'];
-  const servicesLabel = services.length === 2
-    ? 'dejeuner + diner chaque jour'
-    : services[0] === 'lunch' ? 'dejeuner uniquement' : 'diner uniquement';
-
-  // Les templates ne sont plus separes par meal_type — on utilise tout le pool
-  // Melange aleatoire pour eviter que Claude suive l'ordre d'insertion
-  const filteredPool = [...pool].sort(() => Math.random() - 0.5);
-
-  const filteredTemplateList = filteredPool.map((t: Record<string, unknown>, i: number) =>
-    `${i}|${t.name}|${t.categorie_gemrcn}|${(t.estimated_cost_per_person as number)?.toFixed(2)}€`
-  ).join('\n');
-
-  // Pré-calculer la liste exacte des créneaux à remplir (date + service).
-  // On ne laisse PLUS Claude calculer les dates (auparavant il pouvait oublier
-  // le dernier créneau, typiquement le dejeuner du jour de commande).
-  const expectedSlots: { day_index: number; meal_date: string; meal_type: 'lunch' | 'dinner' }[] = [];
-  const spanStart = new Date(span.start_date + 'T12:00:00');
-  for (let d = 0; d < span.day_count; d++) {
-    const date = new Date(spanStart);
-    date.setDate(date.getDate() + d);
-    const yyyy = date.getFullYear();
-    const mm = String(date.getMonth() + 1).padStart(2, '0');
-    const dd = String(date.getDate()).padStart(2, '0');
-    const dateStr = `${yyyy}-${mm}-${dd}`;
-    for (const s of services) {
-      expectedSlots.push({ day_index: d, meal_date: dateStr, meal_type: s as 'lunch' | 'dinner' });
-    }
-  }
-
-  const slotsLabel = expectedSlots
-    .map((s, i) => `${i}|${s.meal_date}|${s.meal_type === 'lunch' ? 'dejeuner' : 'diner'}`)
-    .join('\n');
-
-  const customConstraintsLine = customConstraints.length > 0
-    ? `\nContraintes spécifiques du chef à respecter STRICTEMENT : ${customConstraints.join(' / ')}.`
+  const customConstraintsLine = strictCustom.length > 0
+    ? `\nContraintes strictes du chef à respecter pour tous : ${strictCustom.join(' / ')}.`
     : '';
 
-  const prompt = `Choisis un repas pour CHACUN des ${expectedSlots.length} créneaux ci-dessous (un index de template par créneau, dans l'ordre).
-${nbPersons} personnes, max ${establishment.budget_per_meal}€/pers/repas.${customConstraintsLine}
+  // Notes informatives : contraintes touchant SEULEMENT une partie de l'équipe.
+  // Claude reçoit l'info, ne filtre pas, mais essaie de proposer un plat
+  // compatible quand c'est facile (ex: végé = tout le monde peut manger).
+  const softNotesLine = softNotes.length > 0
+    ? `\n\nÀ noter sur l'équipe (${nbPersons} personnes) : ${softNotes.map((n) => `${n.count} ${n.name}`).join(', ')}. Quand c'est possible sans contrainte forte, privilégie un plat compatible avec tout le monde (un plat végétarien convient à tous, un plat sans porc aussi). Sinon le chef prévoit une option à côté — pas besoin d'éviter à tout prix.`
+    : '';
+
+  const prompt = `Tu composes ${expectedSlots.length} repas pour ${nbPersons} personnes, budget max ${establishment.budget_per_meal}€/pers/repas.${customConstraintsLine}${softNotesLine}
+Chaque repas = 1 protéine + 1 féculent + 1 légume + 1 dessert (index dans les listes ci-dessous).
 ${feedbackContext}
 
 Créneaux à remplir (slot|date|service):
 ${slotsLabel}
 
-Repas disponibles (index|nom|categorie_gemrcn|cout):
-${filteredTemplateList}
+PROTÉINES disponibles (index|nom|prix HT/kg):
+${formatList(byCategory.proteine)}
 
-Regles IMPORTANTES:
-- Tu dois renvoyer EXACTEMENT ${expectedSlots.length} indices (un par créneau, dans l'ordre des slots)
-- Ne jamais utiliser la meme proteine sur 4 repas consecutifs (2 jours)
-- Maximiser la variete des proteines sur tout le span
-- La premiere semaine doit couvrir AU MOINS 5 proteines differentes (ne pas piocher toujours les memes au debut)
-- Varier les feculents : un meme feculent (riz, pates, pommes de terre, semoule, lentilles, quinoa, boulgour...) max 2 fois par semaine
-- Inclure au moins 2 repas vegetariens par semaine (ils couvrent toutes les contraintes : vegetarien, sans-porc, halal)
-- Alterner les couts, minimum ${MIN_COST_PER_PERSON}€/pers par repas
-- Privilegier les repas apprecies, eviter les repas mal notes
-- Coherence : eviter de mettre deux plats "lourds" consecutifs (ex: blanquette midi + pot-au-feu soir). Alterner plat chaud/plat froid quand possible
-Reponds UNIQUEMENT avec un JSON array de ${expectedSlots.length} entiers (indices de templates), dans l'ordre des slots:
-[12, 7, 33, ...]`;
+FÉCULENTS disponibles (index|nom|prix HT/kg):
+${formatList(byCategory.feculent)}
+
+LÉGUMES disponibles (index|nom|prix HT/kg):
+${formatList(byCategory.legume)}
+
+DESSERTS disponibles (index|nom|prix HT/kg):
+${formatList(byCategory.dessert)}
+
+Règles IMPORTANTES :
+- Tu dois renvoyer EXACTEMENT ${expectedSlots.length} repas (un par slot, dans l'ordre)
+- Ne JAMAIS répéter la même protéine sur 4 repas consécutifs (2 jours)
+- Maximiser la variété des protéines : viandes rouges, blanches, volailles, poissons, œufs, végétal — au moins 5 protéines différentes par semaine
+- Au moins 2 repas végétariens par semaine (protéine = œufs, tofu, ou tout ce qui est is_vegetarien)
+- Varier les féculents : un même féculent (riz, pâtes, pommes de terre, lentilles…) max 2 fois par semaine
+- Varier les légumes : pas le même légume sur 2 repas adjacents
+- Varier les desserts : alterner yaourt / crème dessert / compote / fruit / fromage — pas le même type 3 jours d'affilée
+- Cohérence : éviter deux plats lourds consécutifs (ex : bourguignon midi + pot-au-feu soir)
+- Respecter la saison : les ingrédients listés sont déjà filtrés pour la saison courante (${currentSaison})
+- Privilégier les repas appréciés, éviter les repas mal notés
+
+Réponds UNIQUEMENT avec un JSON array de ${expectedSlots.length} objets {p,f,l,d} (indices de protéine, féculent, légume, dessert), dans l'ordre des slots :
+[{"p":0,"f":3,"l":7,"d":2},{"p":5,"f":1,"l":12,"d":4},...]`;
 
   const message = await client.messages.create({
     model: 'claude-haiku-4-5-20251001',
@@ -226,189 +276,209 @@ Reponds UNIQUEMENT avec un JSON array de ${expectedSlots.length} entiers (indice
     throw new Error('Failed to parse suggestions from Claude response');
   }
 
-  // Parse la réponse comme un array d'entiers. Si parsing partiel (réponse tronquée),
-  // on récupère ce qu'on peut.
-  let rawIndices: number[] = [];
+  type Pick = { p?: number; f?: number; l?: number; d?: number };
+  let rawPicks: Pick[] = [];
   try {
     const parsed = JSON.parse(jsonMatch[0]);
-    if (Array.isArray(parsed)) rawIndices = parsed.filter((n) => Number.isInteger(n));
+    if (Array.isArray(parsed)) rawPicks = parsed.filter((x) => typeof x === 'object' && x !== null);
   } catch {
-    // Recup partiel : extraire tous les entiers présents dans le JSON tronqué
-    rawIndices = (jsonMatch[0].match(/-?\d+/g) || []).map(Number);
+    // Recup partiel : trouver les objets complets
+    const matches = jsonMatch[0].match(/\{[^{}]+\}/g) || [];
+    for (const m of matches) {
+      try { rawPicks.push(JSON.parse(m)); } catch { /* skip */ }
+    }
   }
 
-  // Construire les selections en garantissant qu'on a un template pour CHAQUE créneau.
-  // Si Claude en a fourni trop peu, on complète aléatoirement à partir du pool filtré.
-  const selections = expectedSlots.map((slot, i) => {
-    const idx = rawIndices[i];
-    const valid = Number.isInteger(idx) && idx >= 0 && idx < filteredPool.length;
+  // Fonction utilitaire : index valide pour une catégorie ?
+  const safeIdx = (idx: number | undefined, cat: keyof typeof byCategory): number => {
+    if (Number.isInteger(idx) && idx! >= 0 && idx! < byCategory[cat].length) return idx!;
+    return Math.floor(Math.random() * byCategory[cat].length);
+  };
+
+  // Construire les picks finaux pour chaque slot (complète aléatoirement si manquant)
+  const picks = expectedSlots.map((slot, i) => {
+    const raw = rawPicks[i] || {};
     return {
-      day_index: slot.day_index,
-      meal_date: slot.meal_date,
-      meal_type: slot.meal_type,
-      template_index: valid ? idx : Math.floor(Math.random() * filteredPool.length),
+      slot,
+      p: safeIdx(raw.p, 'proteine'),
+      f: safeIdx(raw.f, 'feculent'),
+      l: safeIdx(raw.l, 'legume'),
+      d: safeIdx(raw.d, 'dessert'),
     };
   });
 
-  // Post-traitement: corriger les redondances sur 3 niveaux
-  // 1. Cartes : pas la même carte sur fenêtre de 4 repas (2 jours)
-  // 2. Accompagnements (féculent + légume) : pas le même sur les 2 derniers repas
-  //    (les desserts/laitages sont OK à répéter — yaourt tous les jours c'est conforme GEMRCN)
-  // 3. Catégorie GEMRCN protéine : pas la même sur 4 repas consécutifs
-  selections.sort((a, b) => {
-    if (a.meal_date !== b.meal_date) return a.meal_date.localeCompare(b.meal_date);
-    return a.meal_type === 'lunch' ? -1 : 1;
-  });
+  // Post-traitement variété : on parcourt les repas dans l'ordre, et on remplace
+  // tout choix qui répète trop tôt par un alternatif respectant les fenêtres.
+  const recentProteines: string[] = [];      // fenêtre 4 repas = 2 jours
+  const recentFeculents: string[] = [];      // fenêtre 12 repas = 6 jours (max 2x/semaine)
+  const recentLegumes: string[] = [];        // fenêtre 4 repas = pas de répétition adjacente
+  const recentDessertBuckets: string[] = []; // fenêtre 3 repas
 
-  type V3IngredientType = { name: string; quantity_kg?: number; price_ht_kg?: number; category?: string };
+  const pickAlternative = (
+    cat: keyof typeof byCategory,
+    currentIdx: number,
+    avoidNames: string[],
+    avoidBucket?: string[]
+  ): number => {
+    const items = byCategory[cat];
+    const candidates = items
+      .map((it, idx) => ({ it, idx }))
+      .filter(({ idx }) => idx !== currentIdx);
 
-  const recentCardIds: number[] = [];          // window de 12 cartes (6 jours)
-  const recentSides: string[] = [];            // window de féculents+légumes (6 jours)
-  const recentCategories: string[] = [];       // window de 4 catégories GEMRCN protéine
-  const recentDessertBuckets: string[] = [];   // window de 3 derniers desserts par bucket (yaourt/crème/compote/fruit)
+    const tryFilters = [
+      // Idéal : pas dans avoid + bucket différent (si dessert)
+      ({ it }: { it: BaseIngredient }) => !avoidNames.includes(it.name) && (!avoidBucket || !avoidBucket.includes(classifyDessert(it.name) || '')),
+      // Relâche bucket
+      ({ it }: { it: BaseIngredient }) => !avoidNames.includes(it.name),
+      // Dernier recours : tout sauf l'index actuel
+      () => true,
+    ];
 
-  // Normalise le nom d'un ingrédient pour dédoubler les variantes
-  // ("HARICOTS VERTS EXTRA FINS" et "HARICOTS VERTS TRES FINS" → "haricots verts")
-  const normalizeSide = (name: string): string => {
-    let s = (name || '').toLowerCase().trim();
-    // Enlever calibrages, qualités, formats
-    s = s.replace(/\s+(extra|tr[èe]s|grossi[èe]rement|finement|moyen|fins?|gros|petits?)\s*\w*/gi, '');
-    // Enlever préparations
-    s = s.replace(/\s+(en\s+\w+|coup[ée]s?|[ée]minc[ée]s?|en\s+rondelles|en\s+lamelles|en\s+branches|en\s+fleurettes|en\s+cubes)/gi, '');
-    // Enlever qualifs
-    s = s.replace(/\s+(bio|fra[îi]che?|congel[ée]e?|surgel[ée]e?|[ée]tuv[ée]e?|sec|long\s+\w+|indica|basmati)/gi, '');
-    // Enlever digits/parens
-    s = s.replace(/\s*\([^)]*\)/g, '').replace(/\s+\d+\S*/g, '');
-    // Compresser espaces
-    return s.replace(/\s+/g, ' ').trim();
-  };
-
-  // On ne suit QUE les féculents et légumes (les accompagnements visibles)
-  // → ignorer les protéines (déjà gérées par catégorie GEMRCN)
-  const getCardSides = (t: Record<string, unknown>): string[] =>
-    ((t.ingredients as V3IngredientType[]) || [])
-      .filter((ing) => ing.category === 'feculent' || ing.category === 'legume')
-      .map((ing) => normalizeSide(ing.name));
-
-  // Classifie un dessert dans 5 buckets : yaourt | creme_dessert | compote | fruit | fromage
-  // (yaourt = laitages frais yaourt/fromage blanc/petit suisse ; fromage = fromages affinés)
-  // Renvoie null pour pâtisseries / autres → pas trackés (libres de répéter)
-  const classifyDessert = (name: string): string | null => {
-    const s = (name || '').toLowerCase();
-    if (/yaourt|yogh?ou?rt|fromage\s+blanc|petit\s+suisse/.test(s)) return 'yaourt';
-    if (/cr[èe]me\s+(dessert|caramel|brul[ée]e|chocolat|p[âa]tissi[èe]re|anglaise|vanille)|mousse|flan|liegeois|riz\s+au\s+lait|semoule\s+au\s+lait/.test(s)) return 'creme_dessert';
-    if (/compote/.test(s)) return 'compote';
-    if (/pomme|poire|banane|orange|cl[ée]mentine|mandarine|fraise|raisin|p[êe]che|abricot|kiwi|melon|past[èe]que|prune|cerise|nectarine|ananas|mangue|fruit/.test(s)) return 'fruit';
-    if (/comt[ée]|emmental|gruy[èe]re|brie|camembert|tomme|reblochon|munster|roquefort|bleu|chevre|mimolette|cantal|morbier|raclette|fromage/.test(s)) return 'fromage';
-    return null; // pâtisserie, autres → libre
-  };
-
-  const getCardDessertBucket = (t: Record<string, unknown>): string | null => {
-    const dessertIng = ((t.ingredients as V3IngredientType[]) || []).find((i) => i.category === 'dessert');
-    return dessertIng ? classifyDessert(dessertIng.name) : null;
-  };
-
-  for (let i = 0; i < selections.length; i++) {
-    const sel = selections[i];
-    const template = filteredPool[sel.template_index];
-    if (!template) continue;
-
-    const protein = template.categorie_gemrcn as string;
-    const cardSides = getCardSides(template);
-    const sidesOverlap = cardSides.filter((n) => recentSides.includes(n)).length;
-    const dessertBucket = getCardDessertBucket(template);
-
-    const cardRepeated = recentCardIds.includes(sel.template_index);
-    const proteinRepeated = recentCategories.includes(protein);
-    const sidesRepeated = sidesOverlap >= 1; // strict : aucun féculent/légume en commun
-    const dessertRepeated = dessertBucket !== null && recentDessertBuckets.includes(dessertBucket);
-
-    if (cardRepeated || proteinRepeated || sidesRepeated || dessertRepeated) {
-      // Cherche le meilleur remplaçant
-      // Stratégie : on essaie d'abord "tout propre" (overlap=0, carte/cat différentes),
-      // puis on relâche progressivement pour ne jamais bloquer
-      const allCandidates = filteredPool
-        .map((t: Record<string, unknown>, idx: number) => {
-          const sides = getCardSides(t);
-          const ovlp = sides.filter((n) => recentSides.includes(n)).length;
-          const dBucket = getCardDessertBucket(t);
-          const dRepeats = dBucket !== null && recentDessertBuckets.includes(dBucket);
-          return { t, idx, ovlp, cat: t.categorie_gemrcn as string, dBucket, dRepeats };
-        })
-        .filter(({ idx }) => idx !== sel.template_index);
-
-      const tryFilters = [
-        // 1. parfait : carte non-récente, cat protéine non-récente, 0 overlap, dessert OK
-        (c: typeof allCandidates[0]) => !recentCardIds.includes(c.idx) && !recentCategories.includes(c.cat) && c.ovlp === 0 && !c.dRepeats,
-        // 2. on relâche le dessert (mais protéine et accompagnement restent stricts)
-        (c: typeof allCandidates[0]) => !recentCardIds.includes(c.idx) && !recentCategories.includes(c.cat) && c.ovlp === 0,
-        // 3. on relâche à 1 overlap d'accompagnement
-        (c: typeof allCandidates[0]) => !recentCardIds.includes(c.idx) && !recentCategories.includes(c.cat) && c.ovlp <= 1,
-        // 4. on accepte la même catégorie protéine
-        (c: typeof allCandidates[0]) => !recentCardIds.includes(c.idx) && c.ovlp === 0,
-        // 5. dernier recours : juste pas la même carte
-        (c: typeof allCandidates[0]) => !recentCardIds.includes(c.idx),
-      ];
-
-      let pick: typeof allCandidates[0] | null = null;
-      for (const f of tryFilters) {
-        const matches = allCandidates.filter(f);
-        if (matches.length > 0) {
-          // Parmi les matches, prendre celui avec le moins d'overlap, sinon random
-          matches.sort((a, b) => a.ovlp - b.ovlp);
-          const minOvlp = matches[0].ovlp;
-          const best = matches.filter((c) => c.ovlp === minOvlp);
-          pick = best[Math.floor(Math.random() * best.length)];
-          break;
-        }
-      }
-
-      if (pick) {
-        selections[i] = { ...sel, template_index: pick.idx };
+    for (const f of tryFilters) {
+      const matches = candidates.filter(f);
+      if (matches.length > 0) {
+        return matches[Math.floor(Math.random() * matches.length)].idx;
       }
     }
+    return currentIdx;
+  };
 
-    // Mettre à jour les fenêtres avec la carte finalement retenue
-    const finalTemplate = filteredPool[selections[i].template_index];
-    if (finalTemplate) {
-      recentCardIds.push(selections[i].template_index);
-      recentCategories.push(finalTemplate.categorie_gemrcn as string);
-      recentSides.push(...getCardSides(finalTemplate));
-      const finalDessertBucket = getCardDessertBucket(finalTemplate);
-      if (finalDessertBucket) recentDessertBuckets.push(finalDessertBucket);
+  for (let i = 0; i < picks.length; i++) {
+    const pk = picks[i];
+    const proteine = byCategory.proteine[pk.p];
+    const feculent = byCategory.feculent[pk.f];
+    const legume = byCategory.legume[pk.l];
+    const dessert = byCategory.dessert[pk.d];
+
+    // Vérifier protéine (fenêtre 4)
+    if (recentProteines.includes(proteine.name)) {
+      pk.p = pickAlternative('proteine', pk.p, recentProteines);
+    }
+    // Vérifier féculent (fenêtre 12)
+    if (recentFeculents.includes(byCategory.feculent[pk.f].name)) {
+      pk.f = pickAlternative('feculent', pk.f, recentFeculents);
+    }
+    // Vérifier légume (fenêtre 4)
+    if (recentLegumes.includes(byCategory.legume[pk.l].name)) {
+      pk.l = pickAlternative('legume', pk.l, recentLegumes);
+    }
+    // Vérifier dessert (fenêtre 3 buckets)
+    const dessertBucket = classifyDessert(dessert.name);
+    if (dessertBucket && recentDessertBuckets.includes(dessertBucket)) {
+      pk.d = pickAlternative('dessert', pk.d, [], recentDessertBuckets);
     }
 
-    // Sliding windows
-    while (recentCardIds.length > 12) recentCardIds.shift();              // 12 cartes = 6 jours (pas de doublon de carte sur 6 jours)
-    while (recentCategories.length > 4) recentCategories.shift();         // 4 catégories = 2 jours (anti-redite protéine)
-    while (recentSides.length > 24) recentSides.shift();                  // 24 sides = 12 repas = 6 jours (féculent/légume distinct sur 6 jours)
-    while (recentDessertBuckets.length > 3) recentDessertBuckets.shift(); // 3 derniers desserts (rotation entre les 5 buckets)
+    // Mettre à jour les fenêtres avec les choix finaux
+    recentProteines.push(byCategory.proteine[pk.p].name);
+    recentFeculents.push(byCategory.feculent[pk.f].name);
+    recentLegumes.push(byCategory.legume[pk.l].name);
+    const finalDessertBucket = classifyDessert(byCategory.dessert[pk.d].name);
+    if (finalDessertBucket) recentDessertBuckets.push(finalDessertBucket);
+
+    while (recentProteines.length > 4) recentProteines.shift();
+    while (recentFeculents.length > 12) recentFeculents.shift();
+    while (recentLegumes.length > 4) recentLegumes.shift();
+    while (recentDessertBuckets.length > 3) recentDessertBuckets.shift();
   }
 
-  // Transformer les selections en suggestions completes
-  return selections
-    .filter((sel) => services.includes(sel.meal_type))
-    .map((sel) => {
-    const template = filteredPool[sel.template_index];
-    if (!template) return null;
+  // === Helpers pour calculer les alternatives par contrainte soft ===
+  // Renvoie true si l'ingrédient respecte la contrainte donnée
+  const isCompatibleWith = (ing: BaseIngredient, constraint: string): boolean => {
+    if (constraint === 'vegetarien') return ing.is_vegetarien;
+    if (constraint === 'sans-porc') return !ing.contains_porc;
+    if (constraint === 'halal') return ing.halal_compatible;
+    if (constraint === 'sans-gluten') return !ing.contains_gluten;
+    if (constraint === 'sans-lactose') return !ing.contains_lactose;
+    // Custom : extraire le mot-clé et vérifier l'absence dans nom/aliases
+    const keyword = constraint
+      .toLowerCase()
+      .replace(/^(sans|pas\s+de|pas\s+d['']|allergique\s+(?:au[xs]?|[àa])?|aller?gie\s+(?:au[xs]?|[àa])?|j['']aime\s+pas|sans\s+les?)\s+/i, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (keyword.length < 3) return true;
+    const haystack = [ing.name.toLowerCase(), ...ing.aliases.map((a) => a.toLowerCase())];
+    return !haystack.some((h) => h.includes(keyword));
+  };
 
-    // v3: ingredients ont quantity_kg, on convertit vers le format suggestion (quantity + unit)
-    type V3Ingredient = { name: string; quantity_kg: number; price_ht_kg: number; category: string };
-    const ingredients = ((template.ingredients as V3Ingredient[]) || []).map((ing) => ({
+  // Trouve un ingrédient compatible dans la même catégorie (même pool que le main)
+  const findCompatibleSwap = (
+    original: BaseIngredient,
+    constraint: string
+  ): BaseIngredient | null => {
+    const items = byCategory[original.category] as BaseIngredient[];
+    const compatible = items.filter((i) => i.name !== original.name && isCompatibleWith(i, constraint));
+    if (compatible.length === 0) return null;
+    return compatible[Math.floor(Math.random() * compatible.length)];
+  };
+
+  // Composer les suggestions finales + alternatives par contrainte soft
+  return picks.map(({ slot, p, f, l, d }) => {
+    const mainIngs = [
+      byCategory.proteine[p],
+      byCategory.feculent[f],
+      byCategory.legume[l],
+      byCategory.dessert[d],
+    ];
+
+    const compiledIngredients = mainIngs.map((ing) => ({
       name: ing.name,
-      quantity: (ing.quantity_kg * nbPersons).toFixed(2),
+      quantity: (ing.qty_per_person_kg * nbPersons).toFixed(2),
       unit: 'kg',
       category: ing.category,
     }));
 
+    const costPerPerson = mainIngs.reduce(
+      (sum, ing) => sum + ing.qty_per_person_kg * (ing.price_per_kg_ht ?? 0),
+      0
+    );
+    const totalCost = Math.round(costPerPerson * nbPersons * 100) / 100;
+
+    // Pour chaque contrainte soft, calculer une alternative si nécessaire
+    const alternatives: { for_constraint: string; count: number; ingredients: { name: string; quantity: string; unit: string; category: string }[]; estimated_cost: number }[] = [];
+
+    for (const note of softNotes) {
+      const alreadyCompatible = mainIngs.every((ing) => isCompatibleWith(ing, note.name));
+      if (alreadyCompatible) continue;
+
+      // Pour chaque ingrédient incompatible, chercher un swap dans la même catégorie
+      const altIngs = mainIngs.map((ing) => {
+        if (isCompatibleWith(ing, note.name)) return ing;
+        return findCompatibleSwap(ing, note.name) || ing; // garde le main si aucune alternative dispo
+      });
+
+      // Si aucun swap n'a réussi (toutes les substitutions échouent), skip
+      const swapped = altIngs.some((ing, idx) => ing.name !== mainIngs[idx].name);
+      if (!swapped) continue;
+
+      const altCompiled = altIngs.map((ing) => ({
+        name: ing.name,
+        quantity: (ing.qty_per_person_kg * note.count).toFixed(2),
+        unit: 'kg',
+        category: ing.category,
+      }));
+      const altCostPerPerson = altIngs.reduce(
+        (sum, ing) => sum + ing.qty_per_person_kg * (ing.price_per_kg_ht ?? 0),
+        0
+      );
+      const altTotal = Math.round(altCostPerPerson * note.count * 100) / 100;
+
+      alternatives.push({
+        for_constraint: note.name,
+        count: note.count,
+        ingredients: altCompiled,
+        estimated_cost: altTotal,
+      });
+    }
+
     return {
-      day_index: sel.day_index,
-      meal_date: sel.meal_date,
-      meal_type: sel.meal_type as 'lunch' | 'dinner',
-      ingredients,
-      estimated_cost: Math.round((template.estimated_cost_per_person as number) * nbPersons * 100) / 100,
+      day_index: slot.day_index,
+      meal_date: slot.meal_date,
+      meal_type: slot.meal_type,
+      ingredients: compiledIngredients,
+      estimated_cost: totalCost,
       grocery_list: [],
       notes: null,
+      alternatives,
     };
-  }).filter(Boolean) as Omit<Suggestion, 'id' | 'span_id' | 'establishment_id' | 'created_at'>[];
+  });
 }

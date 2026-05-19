@@ -43,6 +43,37 @@ export function BriefDisplay({ establishmentName, suggestions, prepTasks, span }
     return '';
   };
 
+  // Affiche les alternatives par contrainte (ex: "2 véges → Tofu nature")
+  const renderAlternatives = (meal: Suggestion) => {
+    const alternatives = meal.alternatives || [];
+    if (alternatives.length === 0) return null;
+    return (
+      <div className="mt-2 pt-2 border-t border-bordure/60 space-y-2">
+        {alternatives.map((alt, ai) => {
+          const swaps = alt.ingredients.filter((a) => {
+            const main = meal.ingredients.find((m) => m.category === a.category);
+            return !main || main.name !== a.name;
+          });
+          if (swaps.length === 0) return null;
+          return (
+            <div key={ai} className="text-xs">
+              <div className="flex items-center gap-1 mb-0.5">
+                <span className="font-data font-medium text-rouge">×{alt.count}</span>
+                <span className="text-noir/70">{alt.for_constraint}</span>
+              </div>
+              {swaps.map((s, si) => (
+                <div key={si} className="flex justify-between pl-3 text-sm">
+                  <span className="text-noir">{shortName(s.name)}</span>
+                  <span className="font-data text-muted">{s.quantity} {s.unit}</span>
+                </div>
+              ))}
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
   return (
     <div className="min-h-screen p-4 max-w-lg mx-auto space-y-6">
       <header className="text-center">
@@ -74,7 +105,7 @@ export function BriefDisplay({ establishmentName, suggestions, prepTasks, span }
                   <div className="flex justify-between items-center mb-1">
                     <span className="font-data text-xs text-muted">dejeuner</span>
                     {lunch.estimated_cost && (
-                      <span className="font-data text-xs text-muted">~{(lunch.estimated_cost / (lunch.ingredients.length > 0 ? 1 : 1)).toFixed(0)} EUR</span>
+                      <span className="font-data text-xs text-muted">~{lunch.estimated_cost.toFixed(0)} EUR</span>
                     )}
                   </div>
                   {lunch.ingredients.map((ing, i) => (
@@ -83,6 +114,7 @@ export function BriefDisplay({ establishmentName, suggestions, prepTasks, span }
                       <span className="font-data text-muted">{ing.quantity} {ing.unit}</span>
                     </div>
                   ))}
+                  {renderAlternatives(lunch)}
                   {lunch.notes && (
                     <p className="text-xs text-noir/60 italic mt-2">{lunch.notes}</p>
                   )}
@@ -104,6 +136,7 @@ export function BriefDisplay({ establishmentName, suggestions, prepTasks, span }
                       <span className="font-data text-muted">{ing.quantity} {ing.unit}</span>
                     </div>
                   ))}
+                  {renderAlternatives(dinner)}
                   {dinner.notes && (
                     <p className="text-xs text-noir/60 italic mt-2">{dinner.notes}</p>
                   )}

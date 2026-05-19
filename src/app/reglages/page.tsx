@@ -14,7 +14,6 @@ const DAY_LABELS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
 const DAY_VALUES = [1, 2, 3, 4, 5, 6, 0];
 
 const CONSTRAINTS_OPTIONS = [
-  { value: 'aucune', label: 'Aucune' },
   { value: 'vegetarien', label: 'Végétarien' },
   { value: 'sans-porc', label: 'Sans porc' },
   { value: 'sans-gluten', label: 'Sans gluten' },
@@ -40,8 +39,10 @@ export default function ReglagesPage() {
   const [deliveryDays, setDeliveryDays] = useState<number[]>([]);
   const [planningDays, setPlanningDays] = useState(7);
   const [supplierId, setSupplierId] = useState<string | null>(null);
-  const [constraints, setConstraints] = useState<string[]>([]);
+  // Map { contrainte: nombre de personnes concernées }. Une contrainte n'est active que si count > 0.
+  const [constraintCounts, setConstraintCounts] = useState<Record<string, number>>({});
   const [constraintOther, setConstraintOther] = useState('');
+  const [constraintOtherCount, setConstraintOtherCount] = useState(0);
 
   const saving = savingStep !== 'idle';
 
@@ -59,7 +60,21 @@ export default function ReglagesPage() {
       if (est.services?.includes('lunch') && est.services?.includes('dinner')) setService('both');
       else if (est.services?.includes('dinner')) setService('dinner');
       else setService('lunch');
-      setConstraints(est.dietary_constraints?.length > 0 ? est.dietary_constraints : ['aucune']);
+      // Charger dietary_counts (source de vérité). Fallback : dériver de dietary_constraints
+      // (legacy : count = employee_count, comportement "toute l'équipe")
+      const counts: Record<string, number> = { ...(est.dietary_counts || {}) };
+      const KNOWN = new Set(['vegetarien', 'sans-porc', 'sans-gluten', 'sans-lactose']);
+      if (Object.keys(counts).length === 0 && est.dietary_constraints?.length > 0) {
+        for (const c of est.dietary_constraints) counts[c] = est.employee_count;
+      }
+      // Séparer les contraintes connues du custom (text libre)
+      const customKey = Object.keys(counts).find((k) => !KNOWN.has(k));
+      if (customKey) {
+        setConstraintOther(customKey);
+        setConstraintOtherCount(counts[customKey]);
+        delete counts[customKey];
+      }
+      setConstraintCounts(counts);
       setPlanningDays(est.planning_days || 7);
     }
 
@@ -76,11 +91,13 @@ export default function ReglagesPage() {
     setDeliveryDays((prev) => prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day].sort((a, b) => a - b));
   };
 
-  const toggleConstraint = (value: string) => {
-    if (value === 'aucune') { setConstraints(['aucune']); return; }
-    setConstraints((prev) => {
-      const without = prev.filter((c) => c !== 'aucune');
-      return without.includes(value) ? without.filter((c) => c !== value) : [...without, value];
+  const setConstraintCount = (value: string, count: number, max: number) => {
+    const clamped = Math.max(0, Math.min(max, count));
+    setConstraintCounts((prev) => {
+      const next = { ...prev };
+      if (clamped <= 0) delete next[value];
+      else next[value] = clamped;
+      return next;
     });
   };
 
@@ -107,8 +124,11 @@ export default function ReglagesPage() {
     setError(null);
 
     const services = service === 'both' ? ['lunch', 'dinner'] : [service];
-    const dietaryConstraints = constraints.filter((c) => c !== 'aucune');
-    if (constraintOther.trim()) dietaryConstraints.push(constraintOther.trim());
+    const dietaryCounts: Record<string, number> = { ...constraintCounts };
+    if (constraintOther.trim() && constraintOtherCount > 0) {
+      dietaryCounts[constraintOther.trim()] = Math.min(constraintOtherCount, employeeCount);
+    }
+    const dietaryConstraints = Object.keys(dietaryCounts).filter((k) => dietaryCounts[k] > 0);
 
     try {
       // Étape 1 : update établissement + supplier
@@ -116,7 +136,7 @@ export default function ReglagesPage() {
       await safeFetch('/api/establishment', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ name, employee_count: employeeCount, services, dietary_constraints: dietaryConstraints, planning_days: planningDays }),
+        body: JSON.stringify({ name, employee_count: employeeCount, services, dietary_constraints: dietaryConstraints, dietary_counts: dietaryCounts, planning_days: planningDays }),
       }, 'Mise à jour de la maison');
 
       if (supplierId) {
@@ -245,23 +265,62 @@ export default function ReglagesPage() {
 
       <section className="card space-y-3">
         <h2 className="font-titre text-sm text-noir">Contraintes à table</h2>
-        <div className="grid grid-cols-2 gap-2">
+        <p className="text-xs text-muted">Combien de personnes sont concernées (sur {employeeCount}). 0 = personne.</p>
+        <div className="space-y-2">
           {CONSTRAINTS_OPTIONS.map((opt) => {
-            const selected = constraints.includes(opt.value);
+            const count = constraintCounts[opt.value] || 0;
+            const active = count > 0;
             return (
-              <button
-                key={opt.value}
-                onClick={() => toggleConstraint(opt.value)}
-                className={`py-2.5 px-3 rounded-lg border text-sm font-medium transition-colors ${
-                  selected ? 'border-rouge text-noir font-medium' : 'border-bordure bg-surface text-muted'
-                }`}
-              >
-                {opt.label}
-              </button>
+              <div key={opt.value} className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors ${
+                active ? 'border-rouge' : 'border-bordure bg-surface'
+              }`}>
+                <span className={`flex-1 text-sm ${active ? 'text-noir font-medium' : 'text-muted'}`}>{opt.label}</span>
+                <button
+                  type="button"
+                  onClick={() => setConstraintCount(opt.value, count - 1, employeeCount)}
+                  className="w-7 h-7 rounded border border-bordure font-data text-sm text-noir disabled:opacity-30"
+                  disabled={count <= 0}
+                >−</button>
+                <input
+                  type="number"
+                  value={count}
+                  onChange={(e) => setConstraintCount(opt.value, parseInt(e.target.value) || 0, employeeCount)}
+                  min={0}
+                  max={employeeCount}
+                  className="w-12 input text-center text-sm font-data py-1"
+                />
+                <button
+                  type="button"
+                  onClick={() => setConstraintCount(opt.value, count + 1, employeeCount)}
+                  className="w-7 h-7 rounded border border-bordure font-data text-sm text-noir disabled:opacity-30"
+                  disabled={count >= employeeCount}
+                >+</button>
+                <span className="text-xs text-muted w-10 text-right font-data">/ {employeeCount}</span>
+              </div>
             );
           })}
         </div>
-        <input type="text" className="input" placeholder="Autre contrainte..." value={constraintOther} onChange={(e) => setConstraintOther(e.target.value)} />
+        <div className="space-y-2 pt-2 border-t border-bordure">
+          <p className="text-xs text-muted">Autre contrainte (allergie spécifique, aversion…)</p>
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              className="input flex-1 text-sm"
+              placeholder="ex: sans noix"
+              value={constraintOther}
+              onChange={(e) => setConstraintOther(e.target.value)}
+            />
+            <input
+              type="number"
+              value={constraintOtherCount}
+              onChange={(e) => setConstraintOtherCount(Math.max(0, Math.min(employeeCount, parseInt(e.target.value) || 0)))}
+              min={0}
+              max={employeeCount}
+              className="w-12 input text-center text-sm font-data py-1"
+            />
+            <span className="text-xs text-muted w-10 text-right font-data">/ {employeeCount}</span>
+          </div>
+        </div>
       </section>
 
       <section className="card space-y-3">

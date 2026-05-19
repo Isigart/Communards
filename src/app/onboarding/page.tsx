@@ -12,7 +12,6 @@ const DAY_LABELS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
 const DAY_VALUES = [1, 2, 3, 4, 5, 6, 0];
 
 const CONSTRAINTS_OPTIONS = [
-  { value: 'aucune', label: 'Aucune' },
   { value: 'vegetarien', label: 'Végétarien' },
   { value: 'sans-porc', label: 'Sans porc' },
   { value: 'sans-gluten', label: 'Sans gluten' },
@@ -34,11 +33,13 @@ export default function OnboardingPage() {
 
   const [name, setName] = useState('');
   const [service, setService] = useState<ServiceType | ''>('');
-  const [countLunch, setCountLunch] = useState(12);
-  const [countDinner, setCountDinner] = useState(8);
+  const [countLunch, setCountLunch] = useState(4);
+  const [countDinner, setCountDinner] = useState(2);
   const [orderDays, setOrderDays] = useState<number[]>([]);
-  const [constraints, setConstraints] = useState<string[]>([]);
+  // Map { contrainte: nombre de personnes concernées }. Une contrainte n'est active que si count > 0.
+  const [constraintCounts, setConstraintCounts] = useState<Record<string, number>>({});
   const [constraintOther, setConstraintOther] = useState('');
+  const [constraintOtherCount, setConstraintOtherCount] = useState(0);
 
   const loading = loadingStep !== 'idle';
 
@@ -67,11 +68,13 @@ export default function OnboardingPage() {
     );
   };
 
-  const toggleConstraint = (value: string) => {
-    if (value === 'aucune') { setConstraints(['aucune']); return; }
-    setConstraints((prev) => {
-      const without = prev.filter((c) => c !== 'aucune');
-      return without.includes(value) ? without.filter((c) => c !== value) : [...without, value];
+  const setConstraintCount = (value: string, count: number, max: number) => {
+    const clamped = Math.max(0, Math.min(max, count));
+    setConstraintCounts((prev) => {
+      const next = { ...prev };
+      if (clamped <= 0) delete next[value];
+      else next[value] = clamped;
+      return next;
     });
   };
 
@@ -110,8 +113,12 @@ export default function OnboardingPage() {
 
     const employeeCount = service === 'both' ? countLunch + countDinner : countLunch;
     const services = service === 'both' ? ['lunch', 'dinner'] : service === 'dinner' ? ['dinner'] : ['lunch'];
-    const allConstraints = [...constraints];
-    if (constraintOther.trim()) allConstraints.push(constraintOther.trim());
+    // Construire dietary_counts (compte par contrainte) + dietary_constraints (clés actives)
+    const dietaryCounts: Record<string, number> = { ...constraintCounts };
+    if (constraintOther.trim() && constraintOtherCount > 0) {
+      dietaryCounts[constraintOther.trim()] = Math.min(constraintOtherCount, employeeCount);
+    }
+    const dietaryConstraints = Object.keys(dietaryCounts).filter((k) => dietaryCounts[k] > 0);
 
     try {
       // Étape 1 : créer l'établissement + fournisseur
@@ -125,7 +132,8 @@ export default function OnboardingPage() {
           budget_per_meal: BUDGET_HCR,
           market: 'fr',
           services,
-          dietary_constraints: allConstraints.filter((c) => c !== 'aucune'),
+          dietary_constraints: dietaryConstraints,
+          dietary_counts: dietaryCounts,
           supplier_name: 'Fournisseur principal',
           delivery_days: orderDays,
         }),
@@ -210,6 +218,7 @@ export default function OnboardingPage() {
         {step === 2 && (
           <div className="space-y-4">
             <h2 className="font-titre text-xl text-noir">Combien à table ?</h2>
+            <p className="text-xs text-muted">À partir de 1 personne — peu importe la taille de la brigade.</p>
             {service === 'both' ? (
               <div className="space-y-4">
                 <div>
@@ -259,29 +268,71 @@ export default function OnboardingPage() {
           </div>
         )}
 
-        {/* Step 4: Contraintes alimentaires */}
-        {step === 4 && (
-          <div className="space-y-4">
-            <h2 className="font-titre text-xl text-noir">Des contraintes à table ?</h2>
-            <div className="grid grid-cols-2 gap-2">
-              {CONSTRAINTS_OPTIONS.map((opt) => {
-                const selected = constraints.includes(opt.value);
-                return (
-                  <button
-                    key={opt.value}
-                    onClick={() => toggleConstraint(opt.value)}
-                    className={`py-3 px-4 rounded-lg border font-medium text-sm transition-colors ${
-                      selected ? 'border-rouge text-noir font-medium' : 'border-bordure bg-surface text-muted'
-                    }`}
-                  >
-                    {opt.label}
-                  </button>
-                );
-              })}
+        {/* Step 4: Contraintes alimentaires (par nombre de personnes concernées) */}
+        {step === 4 && (() => {
+          const total = service === 'both' ? countLunch + countDinner : countLunch;
+          return (
+            <div className="space-y-4">
+              <h2 className="font-titre text-xl text-noir">Des contraintes à table ?</h2>
+              <p className="text-xs text-muted">Combien de personnes sont concernées (sur {total}). Laisse à 0 si personne n&apos;a la contrainte.</p>
+              <div className="space-y-2">
+                {CONSTRAINTS_OPTIONS.map((opt) => {
+                  const count = constraintCounts[opt.value] || 0;
+                  const active = count > 0;
+                  return (
+                    <div key={opt.value} className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors ${
+                      active ? 'border-rouge' : 'border-bordure bg-surface'
+                    }`}>
+                      <span className={`flex-1 text-sm ${active ? 'text-noir font-medium' : 'text-muted'}`}>{opt.label}</span>
+                      <button
+                        type="button"
+                        onClick={() => setConstraintCount(opt.value, count - 1, total)}
+                        className="w-7 h-7 rounded border border-bordure font-data text-sm text-noir disabled:opacity-30"
+                        disabled={count <= 0}
+                      >−</button>
+                      <input
+                        type="number"
+                        value={count}
+                        onChange={(e) => setConstraintCount(opt.value, parseInt(e.target.value) || 0, total)}
+                        min={0}
+                        max={total}
+                        className="w-12 input text-center text-sm font-data py-1"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setConstraintCount(opt.value, count + 1, total)}
+                        className="w-7 h-7 rounded border border-bordure font-data text-sm text-noir disabled:opacity-30"
+                        disabled={count >= total}
+                      >+</button>
+                      <span className="text-xs text-muted w-10 text-right font-data">/ {total}</span>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="space-y-2 pt-2 border-t border-bordure">
+                <p className="text-xs text-muted">Autre contrainte (allergie spécifique, aversion…)</p>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    className="input flex-1 text-sm"
+                    placeholder="ex: sans noix"
+                    value={constraintOther}
+                    onChange={(e) => setConstraintOther(e.target.value)}
+                  />
+                  <input
+                    type="number"
+                    value={constraintOtherCount}
+                    onChange={(e) => setConstraintOtherCount(Math.max(0, Math.min(total, parseInt(e.target.value) || 0)))}
+                    min={0}
+                    max={total}
+                    className="w-12 input text-center text-sm font-data py-1"
+                  />
+                  <span className="text-xs text-muted w-10 text-right font-data">/ {total}</span>
+                </div>
+              </div>
             </div>
-            <input type="text" className="input" placeholder="Autre contrainte..." value={constraintOther} onChange={(e) => setConstraintOther(e.target.value)} />
-          </div>
-        )}
+          );
+        })()}
 
         {/* Erreur */}
         {error && (

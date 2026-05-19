@@ -77,27 +77,49 @@ export async function generateSuggestions(input: GenerateInput): Promise<Omit<Su
     throw new Error('No base_ingredients in database. Seed `supabase/base_ingredients.sql` first.');
   }
 
-  // Appliquer contraintes alimentaires "câblées" (booléens)
-  const constraints: string[] = establishment.dietary_constraints || [];
-  const KNOWN_CONSTRAINTS = ['vegetarien', 'sans-porc', 'halal', 'sans-gluten', 'sans-lactose'];
-  const knownConstraints = constraints.filter((c) => KNOWN_CONSTRAINTS.includes(c));
-  const customConstraints = constraints.filter((c) => !KNOWN_CONSTRAINTS.includes(c) && c.trim().length > 0);
+  // === Contraintes alimentaires par nombre de personnes concernées ===
+  // dietary_counts est source de vérité ({ contrainte: count }).
+  // Si vide, fallback sur dietary_constraints (legacy, traité comme "toute l'équipe").
+  // Règle : count == employee_count → filtre strict, sinon informatif au prompt.
+  const counts: Record<string, number> = (establishment.dietary_counts as Record<string, number> | undefined) || {};
+  if (Object.keys(counts).length === 0 && establishment.dietary_constraints) {
+    for (const c of establishment.dietary_constraints) counts[c] = nbPersons;
+  }
 
-  if (knownConstraints.length > 0) {
+  const KNOWN_CONSTRAINTS = new Set(['vegetarien', 'sans-porc', 'halal', 'sans-gluten', 'sans-lactose']);
+  const strictKnown: string[] = [];
+  const strictCustom: string[] = [];
+  const softNotes: { name: string; count: number }[] = [];
+
+  for (const [name, rawCount] of Object.entries(counts)) {
+    const c = Number(rawCount) || 0;
+    if (c <= 0) continue;
+    if (c >= nbPersons) {
+      // Toute l'équipe → filtre strict
+      if (KNOWN_CONSTRAINTS.has(name)) strictKnown.push(name);
+      else if (name.trim().length > 0) strictCustom.push(name);
+    } else {
+      // Minorité → informatif (le chef gère côté cuisine)
+      softNotes.push({ name, count: c });
+    }
+  }
+
+  // Filtre strict pour les contraintes connues (toute l'équipe)
+  if (strictKnown.length > 0) {
     pool = pool.filter((ing) => {
-      if (knownConstraints.includes('vegetarien') && !ing.is_vegetarien) return false;
-      if (knownConstraints.includes('sans-porc') && ing.contains_porc) return false;
-      if (knownConstraints.includes('halal') && !ing.halal_compatible) return false;
-      if (knownConstraints.includes('sans-gluten') && ing.contains_gluten) return false;
-      if (knownConstraints.includes('sans-lactose') && ing.contains_lactose) return false;
+      if (strictKnown.includes('vegetarien') && !ing.is_vegetarien) return false;
+      if (strictKnown.includes('sans-porc') && ing.contains_porc) return false;
+      if (strictKnown.includes('halal') && !ing.halal_compatible) return false;
+      if (strictKnown.includes('sans-gluten') && ing.contains_gluten) return false;
+      if (strictKnown.includes('sans-lactose') && ing.contains_lactose) return false;
       return true;
     });
   }
 
-  // Contraintes custom : on extrait le mot-clé et on exclut les ingrédients
+  // Contraintes custom strictes : extraire le mot-clé et exclure les ingrédients
   // qui le contiennent (dans le nom canonique ou les aliases).
   const customKeywords: string[] = [];
-  for (const constraint of customConstraints) {
+  for (const constraint of strictCustom) {
     const keyword = constraint
       .toLowerCase()
       .replace(/^(sans|pas\s+de|pas\s+d['']|allergique\s+(?:au[xs]?|[àa])?|aller?gie\s+(?:au[xs]?|[àa])?|j['']aime\s+pas|sans\s+les?)\s+/i, '')
@@ -123,7 +145,7 @@ export async function generateSuggestions(input: GenerateInput): Promise<Omit<Su
   // Vérifier qu'on a au moins 1 ingrédient par catégorie
   for (const cat of ['proteine', 'feculent', 'legume', 'dessert'] as const) {
     if (byCategory[cat].length === 0) {
-      throw new Error(`Pool ${cat} vide après contraintes [${constraints.join(', ')}]. Élargis les contraintes ou seed plus d'ingrédients.`);
+      throw new Error(`Pool ${cat} vide après contraintes strictes [${[...strictKnown, ...strictCustom].join(', ')}]. Élargis les contraintes ou seed plus d'ingrédients.`);
     }
   }
 
@@ -197,11 +219,18 @@ export async function generateSuggestions(input: GenerateInput): Promise<Omit<Su
     }
   }
 
-  const customConstraintsLine = customConstraints.length > 0
-    ? `\nContraintes spécifiques du chef à respecter STRICTEMENT : ${customConstraints.join(' / ')}.`
+  const customConstraintsLine = strictCustom.length > 0
+    ? `\nContraintes strictes du chef à respecter pour tous : ${strictCustom.join(' / ')}.`
     : '';
 
-  const prompt = `Tu composes ${expectedSlots.length} repas pour ${nbPersons} personnes, budget max ${establishment.budget_per_meal}€/pers/repas.${customConstraintsLine}
+  // Notes informatives : contraintes touchant SEULEMENT une partie de l'équipe.
+  // Claude reçoit l'info, ne filtre pas, mais essaie de proposer un plat
+  // compatible quand c'est facile (ex: végé = tout le monde peut manger).
+  const softNotesLine = softNotes.length > 0
+    ? `\n\nÀ noter sur l'équipe (${nbPersons} personnes) : ${softNotes.map((n) => `${n.count} ${n.name}`).join(', ')}. Quand c'est possible sans contrainte forte, privilégie un plat compatible avec tout le monde (un plat végétarien convient à tous, un plat sans porc aussi). Sinon le chef prévoit une option à côté — pas besoin d'éviter à tout prix.`
+    : '';
+
+  const prompt = `Tu composes ${expectedSlots.length} repas pour ${nbPersons} personnes, budget max ${establishment.budget_per_meal}€/pers/repas.${customConstraintsLine}${softNotesLine}
 Chaque repas = 1 protéine + 1 féculent + 1 légume + 1 dessert (index dans les listes ci-dessous).
 ${feedbackContext}
 

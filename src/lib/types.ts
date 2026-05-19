@@ -14,7 +14,15 @@ export interface Establishment {
   currency: string;
   language: string;
   services: string[];
+  /** Legacy : liste plate des contraintes actives. Dérivée de dietary_counts (clés avec count > 0). */
   dietary_constraints: string[];
+  /**
+   * Compte de personnes concernées par chaque contrainte.
+   * Ex: { vegetarien: 2 } sur 10 employés = 2 personnes véges, les 8 autres mangent de tout.
+   * count == employee_count → contrainte stricte (filtre les ingrédients).
+   * 0 < count < employee_count → informatif (note au chef, pas de filtre).
+   */
+  dietary_counts: Record<string, number>;
   planning_days: number;
   created_at: string;
   updated_at: string;

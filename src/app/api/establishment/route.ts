@@ -26,6 +26,13 @@ export async function POST(req: NextRequest) {
   const body = await req.json();
   const supabase = createServerClient();
 
+  // dietary_counts est la source de vérité (compte par contrainte)
+  // dietary_constraints est dérivé (clés actives) pour rétrocompat avec les écritures legacy
+  const dietaryCounts: Record<string, number> = body.dietary_counts || {};
+  const dietaryConstraints: string[] = body.dietary_constraints && body.dietary_constraints.length > 0
+    ? body.dietary_constraints
+    : Object.keys(dietaryCounts).filter((k) => (dietaryCounts[k] || 0) > 0);
+
   // Create establishment with HCR budget
   const { data: establishment, error: estError } = await supabase
     .from('establishments')
@@ -38,7 +45,8 @@ export async function POST(req: NextRequest) {
       currency: 'EUR',
       language: 'fr',
       services: body.services || ['lunch'],
-      dietary_constraints: body.dietary_constraints || [],
+      dietary_constraints: dietaryConstraints,
+      dietary_counts: dietaryCounts,
     })
     .select()
     .single();

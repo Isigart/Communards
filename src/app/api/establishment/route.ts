@@ -33,6 +33,14 @@ export async function POST(req: NextRequest) {
     ? body.dietary_constraints
     : Object.keys(dietaryCounts).filter((k) => (dietaryCounts[k] || 0) > 0);
 
+  // lunch_days / dinner_days est la source de vérité (planning par jour).
+  // services est dérivé pour rétrocompat.
+  const lunchDays: number[] = Array.isArray(body.lunch_days) ? body.lunch_days : [1, 2, 3, 4, 5, 6, 0];
+  const dinnerDays: number[] = Array.isArray(body.dinner_days) ? body.dinner_days : [];
+  const derivedServices: string[] = body.services && body.services.length > 0
+    ? body.services
+    : [lunchDays.length > 0 ? 'lunch' : null, dinnerDays.length > 0 ? 'dinner' : null].filter(Boolean) as string[];
+
   // Create establishment with HCR budget
   const { data: establishment, error: estError } = await supabase
     .from('establishments')
@@ -44,7 +52,9 @@ export async function POST(req: NextRequest) {
       market: body.market || 'fr',
       currency: 'EUR',
       language: 'fr',
-      services: body.services || ['lunch'],
+      services: derivedServices,
+      lunch_days: lunchDays,
+      dinner_days: dinnerDays,
       dietary_constraints: dietaryConstraints,
       dietary_counts: dietaryCounts,
       include_dessert: typeof body.include_dessert === 'boolean' ? body.include_dessert : true,

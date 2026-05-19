@@ -13,7 +13,12 @@ export interface Establishment {
   market: Market;
   currency: string;
   language: string;
+  /** Legacy / dérivé : ['lunch'] / ['dinner'] / ['lunch','dinner']. Vrai source de vérité = lunch_days + dinner_days. */
   services: string[];
+  /** Jours de la semaine où on génère un déjeuner. 0=Dim, 1=Lun, ..., 6=Sam. */
+  lunch_days: number[];
+  /** Jours de la semaine où on génère un dîner. 0=Dim, 1=Lun, ..., 6=Sam. */
+  dinner_days: number[];
   /** Legacy : liste plate des contraintes actives. Dérivée de dietary_counts (clés avec count > 0). */
   dietary_constraints: string[];
   /**

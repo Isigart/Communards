@@ -162,15 +162,17 @@ export async function generateSuggestions(input: GenerateInput): Promise<Omit<Su
   const formatList = (items: BaseIngredient[]): string =>
     items.map((i, idx) => `${idx}|${i.name}|${(i.price_per_kg_ht ?? 0).toFixed(2)}€/kg`).join('\n');
 
-  // Déterminer les services
-  const services = (establishment.services && establishment.services.length > 0)
-    ? establishment.services
-    : ['lunch', 'dinner'];
-  const servicesLabel = services.length === 2
-    ? 'dejeuner + diner chaque jour'
-    : services[0] === 'lunch' ? 'dejeuner uniquement' : 'diner uniquement';
+  // Planning par jour : lunch_days + dinner_days (0=Dim, 1=Lun, ..., 6=Sam)
+  // Fallback legacy : si pas définis, déduire de services (= comportement "tous les jours")
+  const ALL_DOW = [1, 2, 3, 4, 5, 6, 0];
+  const lunchDays: number[] = Array.isArray(establishment.lunch_days)
+    ? establishment.lunch_days
+    : ((establishment.services || []).includes('lunch') ? ALL_DOW : []);
+  const dinnerDays: number[] = Array.isArray(establishment.dinner_days)
+    ? establishment.dinner_days
+    : ((establishment.services || []).includes('dinner') ? ALL_DOW : []);
 
-  // Pré-calculer la liste exacte des créneaux à remplir
+  // Pré-calculer la liste exacte des créneaux à remplir (un slot par paire date+service active ce jour-là)
   const expectedSlots: { day_index: number; meal_date: string; meal_type: 'lunch' | 'dinner' }[] = [];
   const spanStart = new Date(span.start_date + 'T12:00:00');
   for (let d = 0; d < span.day_count; d++) {
@@ -180,9 +182,18 @@ export async function generateSuggestions(input: GenerateInput): Promise<Omit<Su
     const mm = String(date.getMonth() + 1).padStart(2, '0');
     const dd = String(date.getDate()).padStart(2, '0');
     const dateStr = `${yyyy}-${mm}-${dd}`;
-    for (const s of services) {
-      expectedSlots.push({ day_index: d, meal_date: dateStr, meal_type: s as 'lunch' | 'dinner' });
+    const dayOfWeek = date.getDay();
+    if (lunchDays.includes(dayOfWeek)) {
+      expectedSlots.push({ day_index: d, meal_date: dateStr, meal_type: 'lunch' });
     }
+    if (dinnerDays.includes(dayOfWeek)) {
+      expectedSlots.push({ day_index: d, meal_date: dateStr, meal_type: 'dinner' });
+    }
+  }
+
+  // Si l'utilisateur n'a coché aucun service, rien à générer
+  if (expectedSlots.length === 0) {
+    throw new Error('Aucun repas à générer : coche au moins un service (midi ou soir) dans le planning hebdo.');
   }
 
   const slotsLabel = expectedSlots

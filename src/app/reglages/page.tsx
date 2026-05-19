@@ -7,11 +7,11 @@ import { computeSpanDefinitions } from '@/lib/spans';
 import { createBrowserClient } from '@/lib/supabase';
 import { getToken, fetchEstablishment, fetchSuppliers, invalidateEstablishment, invalidateSuppliers, invalidateSuggestions } from '@/lib/cache';
 
-type ServiceType = 'lunch' | 'dinner' | 'both';
 type SavingStep = 'idle' | 'updating' | 'configuring' | 'generating';
 
 const DAY_LABELS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
 const DAY_VALUES = [1, 2, 3, 4, 5, 6, 0];
+const ALL_DAYS: number[] = [1, 2, 3, 4, 5, 6, 0];
 
 const CONSTRAINTS_OPTIONS = [
   { value: 'vegetarien', label: 'Végétarien' },
@@ -34,7 +34,10 @@ export default function ReglagesPage() {
   const [token, setToken] = useState<string | null>(null);
 
   const [name, setName] = useState('');
-  const [service, setService] = useState<ServiceType>('lunch');
+  const [lunchDays, setLunchDays] = useState<number[]>(ALL_DAYS);
+  const [dinnerDays, setDinnerDays] = useState<number[]>([]);
+  const hasLunch = lunchDays.length > 0;
+  const hasDinner = dinnerDays.length > 0;
   const [employeeCount, setEmployeeCount] = useState(12);
   const [deliveryDays, setDeliveryDays] = useState<number[]>([]);
   const [planningDays, setPlanningDays] = useState(7);
@@ -59,9 +62,14 @@ export default function ReglagesPage() {
       setName(est.name);
       setEmployeeCount(est.employee_count);
       setIncludeDessert(est.include_dessert !== false); // default true si pas défini
-      if (est.services?.includes('lunch') && est.services?.includes('dinner')) setService('both');
-      else if (est.services?.includes('dinner')) setService('dinner');
-      else setService('lunch');
+      // Charger lunch_days / dinner_days (source de vérité). Fallback : déduire de services (legacy).
+      if (est.lunch_days || est.dinner_days) {
+        setLunchDays(est.lunch_days || []);
+        setDinnerDays(est.dinner_days || []);
+      } else {
+        setLunchDays(est.services?.includes('lunch') ? ALL_DAYS : []);
+        setDinnerDays(est.services?.includes('dinner') ? ALL_DAYS : []);
+      }
       // Charger dietary_counts (source de vérité). Fallback : dériver de dietary_constraints
       // (legacy : count = employee_count, comportement "toute l'équipe")
       const counts: Record<string, number> = { ...(est.dietary_counts || {}) };
@@ -91,6 +99,13 @@ export default function ReglagesPage() {
 
   const toggleDay = (day: number) => {
     setDeliveryDays((prev) => prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day].sort((a, b) => a - b));
+  };
+
+  const toggleScheduleCell = (slot: 'lunch' | 'dinner', day: number) => {
+    const setFn = slot === 'lunch' ? setLunchDays : setDinnerDays;
+    setFn((prev) =>
+      prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day].sort((a, b) => a - b)
+    );
   };
 
   const setConstraintCount = (value: string, count: number, max: number) => {
@@ -125,7 +140,7 @@ export default function ReglagesPage() {
     if (!token) return;
     setError(null);
 
-    const services = service === 'both' ? ['lunch', 'dinner'] : [service];
+    const services = [hasLunch ? 'lunch' : null, hasDinner ? 'dinner' : null].filter(Boolean) as string[];
     const dietaryCounts: Record<string, number> = { ...constraintCounts };
     if (constraintOther.trim() && constraintOtherCount > 0) {
       dietaryCounts[constraintOther.trim()] = Math.min(constraintOtherCount, employeeCount);
@@ -138,7 +153,7 @@ export default function ReglagesPage() {
       await safeFetch('/api/establishment', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ name, employee_count: employeeCount, services, dietary_constraints: dietaryConstraints, dietary_counts: dietaryCounts, include_dessert: includeDessert, planning_days: planningDays }),
+        body: JSON.stringify({ name, employee_count: employeeCount, services, lunch_days: lunchDays, dinner_days: dinnerDays, dietary_constraints: dietaryConstraints, dietary_counts: dietaryCounts, include_dessert: includeDessert, planning_days: planningDays }),
       }, 'Mise à jour de la maison');
 
       if (supplierId) {
@@ -198,19 +213,54 @@ export default function ReglagesPage() {
       </section>
 
       <section className="card space-y-3">
-        <h2 className="font-titre text-sm text-noir">Services</h2>
-        <div className="space-y-2">
-          {([['lunch', 'Déjeuner uniquement'], ['dinner', 'Dîner uniquement'], ['both', 'Les deux']] as [ServiceType, string][]).map(([value, label]) => (
-            <button
-              key={value}
-              onClick={() => setService(value)}
-              className={`w-full p-3 rounded-lg border text-left text-sm transition-colors ${
-                service === value ? 'border-rouge text-noir font-medium' : 'border-bordure bg-surface text-muted'
-              }`}
-            >
-              {label}
-            </button>
-          ))}
+        <h2 className="font-titre text-sm text-noir">Planning hebdo</h2>
+        <p className="text-xs text-muted">Coche les services à générer chaque jour.</p>
+        <div className="rounded-lg border border-bordure overflow-hidden">
+          <div className="grid grid-cols-3 bg-bordure/30 text-[10px] font-data uppercase text-muted">
+            <div className="py-2 px-2"></div>
+            <div className="py-2 text-center">Midi</div>
+            <div className="py-2 text-center">Soir</div>
+          </div>
+          {DAY_VALUES.map((dayVal, i) => {
+            const lunchOn = lunchDays.includes(dayVal);
+            const dinnerOn = dinnerDays.includes(dayVal);
+            return (
+              <div key={dayVal} className="grid grid-cols-3 border-t border-bordure">
+                <div className="py-2 px-2 text-sm text-noir font-medium">{DAY_LABELS[i]}</div>
+                <button
+                  type="button"
+                  onClick={() => toggleScheduleCell('lunch', dayVal)}
+                  className={`py-3 text-sm font-data transition-colors ${
+                    lunchOn ? 'bg-rouge/10 text-rouge font-semibold' : 'bg-surface text-muted/40'
+                  }`}
+                >{lunchOn ? '✓' : '·'}</button>
+                <button
+                  type="button"
+                  onClick={() => toggleScheduleCell('dinner', dayVal)}
+                  className={`py-3 text-sm font-data transition-colors ${
+                    dinnerOn ? 'bg-rouge/10 text-rouge font-semibold' : 'bg-surface text-muted/40'
+                  }`}
+                >{dinnerOn ? '✓' : '·'}</button>
+              </div>
+            );
+          })}
+        </div>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => { setLunchDays(ALL_DAYS); setDinnerDays(ALL_DAYS); }}
+            className="flex-1 py-2 rounded-lg border border-bordure text-xs font-data text-muted hover:text-noir"
+          >Tous</button>
+          <button
+            type="button"
+            onClick={() => { setLunchDays(ALL_DAYS); setDinnerDays([]); }}
+            className="flex-1 py-2 rounded-lg border border-bordure text-xs font-data text-muted hover:text-noir"
+          >Midis</button>
+          <button
+            type="button"
+            onClick={() => { setLunchDays([]); setDinnerDays([]); }}
+            className="flex-1 py-2 rounded-lg border border-bordure text-xs font-data text-muted hover:text-noir"
+          >Rien</button>
         </div>
         <div className="pt-2 border-t border-bordure space-y-2">
           <p className="text-sm text-noir">Un dessert à chaque repas ?</p>

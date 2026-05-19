@@ -5,11 +5,11 @@ import { createBrowserClient } from '@/lib/supabase';
 import { BUDGET_HCR } from '@/lib/types';
 import { computeSpanDefinitions } from '@/lib/spans';
 
-type ServiceType = 'lunch' | 'dinner' | 'both';
 type LoadingStep = 'idle' | 'creating' | 'configuring' | 'generating';
 
 const DAY_LABELS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
 const DAY_VALUES = [1, 2, 3, 4, 5, 6, 0];
+const ALL_DAYS: number[] = [1, 2, 3, 4, 5, 6, 0];
 
 const CONSTRAINTS_OPTIONS = [
   { value: 'vegetarien', label: 'Végétarien' },
@@ -32,7 +32,11 @@ export default function OnboardingPage() {
   const [token, setToken] = useState<string | null>(null);
 
   const [name, setName] = useState('');
-  const [service, setService] = useState<ServiceType | ''>('');
+  // lunch/dinner days = jours de la semaine cochés (0=Dim, 1=Lun, ..., 6=Sam)
+  const [lunchDays, setLunchDays] = useState<number[]>(ALL_DAYS);
+  const [dinnerDays, setDinnerDays] = useState<number[]>([]);
+  const hasLunch = lunchDays.length > 0;
+  const hasDinner = dinnerDays.length > 0;
   const [countLunch, setCountLunch] = useState(4);
   const [countDinner, setCountDinner] = useState(2);
   const [orderDays, setOrderDays] = useState<number[]>([]);
@@ -69,6 +73,13 @@ export default function OnboardingPage() {
     );
   };
 
+  const toggleScheduleCell = (slot: 'lunch' | 'dinner', day: number) => {
+    const setFn = slot === 'lunch' ? setLunchDays : setDinnerDays;
+    setFn((prev) =>
+      prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day].sort((a, b) => a - b)
+    );
+  };
+
   const setConstraintCount = (value: string, count: number, max: number) => {
     const clamped = Math.max(0, Math.min(max, count));
     setConstraintCounts((prev) => {
@@ -82,8 +93,8 @@ export default function OnboardingPage() {
   const canAdvance = () => {
     switch (step) {
       case 0: return name.trim().length > 0;
-      case 1: return service !== '';
-      case 2: return service === 'both' ? countLunch > 0 && countDinner > 0 : countLunch > 0;
+      case 1: return hasLunch || hasDinner;
+      case 2: return (!hasLunch || countLunch > 0) && (!hasDinner || countDinner > 0);
       case 3: return orderDays.length > 0;
       case 4: return true;
       default: return false;
@@ -112,8 +123,8 @@ export default function OnboardingPage() {
     if (!token) return;
     setError(null);
 
-    const employeeCount = service === 'both' ? countLunch + countDinner : countLunch;
-    const services = service === 'both' ? ['lunch', 'dinner'] : service === 'dinner' ? ['dinner'] : ['lunch'];
+    const employeeCount = (hasLunch ? countLunch : 0) + (hasDinner ? countDinner : 0);
+    const services = [hasLunch ? 'lunch' : null, hasDinner ? 'dinner' : null].filter(Boolean) as string[];
     // Construire dietary_counts (compte par contrainte) + dietary_constraints (clés actives)
     const dietaryCounts: Record<string, number> = { ...constraintCounts };
     if (constraintOther.trim() && constraintOtherCount > 0) {
@@ -133,6 +144,8 @@ export default function OnboardingPage() {
           budget_per_meal: BUDGET_HCR,
           market: 'fr',
           services,
+          lunch_days: lunchDays,
+          dinner_days: dinnerDays,
           dietary_constraints: dietaryConstraints,
           dietary_counts: dietaryCounts,
           include_dessert: includeDessert,
@@ -171,10 +184,9 @@ export default function OnboardingPage() {
 
   const progress = ((step + 1) / 5) * 100;
 
-  const budgetPreview = () => {
-    if (service === 'both') return (countLunch + countDinner) * BUDGET_HCR * 5;
-    return countLunch * BUDGET_HCR * 5;
-  };
+  // Budget hebdo = (jours_dej × headcount_dej + jours_din × headcount_din) × prix HCR
+  const budgetPreview = () =>
+    (lunchDays.length * countLunch + dinnerDays.length * countDinner) * BUDGET_HCR;
 
   return (
     <div className="min-h-screen pb-32">
@@ -196,23 +208,56 @@ export default function OnboardingPage() {
           </div>
         )}
 
-        {/* Step 1: Services + dessert */}
+        {/* Step 1: Planning hebdo (7×2 midi/soir) + dessert */}
         {step === 1 && (
           <div className="space-y-6">
-            <div className="space-y-4">
-              <h2 className="font-titre text-xl text-noir">Quels services à nourrir ?</h2>
-              <div className="space-y-3">
-                {([['lunch', 'Déjeuner uniquement'], ['dinner', 'Dîner uniquement'], ['both', 'Les deux']] as [ServiceType, string][]).map(([value, label]) => (
-                  <button
-                    key={value}
-                    onClick={() => setService(value)}
-                    className={`w-full p-4 rounded-xl border text-left font-medium transition-colors ${
-                      service === value ? 'border-rouge text-noir font-medium' : 'border-bordure bg-surface text-muted'
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
+            <div className="space-y-3">
+              <h2 className="font-titre text-xl text-noir">Quels repas générer ?</h2>
+              <p className="text-xs text-muted">Coche les services que tu sers chaque jour.</p>
+              <div className="rounded-lg border border-bordure overflow-hidden">
+                <div className="grid grid-cols-3 bg-bordure/30 text-[10px] font-data uppercase text-muted">
+                  <div className="py-2 px-2"></div>
+                  <div className="py-2 text-center">Midi</div>
+                  <div className="py-2 text-center">Soir</div>
+                </div>
+                {DAY_VALUES.map((dayVal, i) => {
+                  const lunchOn = lunchDays.includes(dayVal);
+                  const dinnerOn = dinnerDays.includes(dayVal);
+                  return (
+                    <div key={dayVal} className="grid grid-cols-3 border-t border-bordure">
+                      <div className="py-2 px-2 text-sm text-noir font-medium">{DAY_LABELS[i]}</div>
+                      <button
+                        onClick={() => toggleScheduleCell('lunch', dayVal)}
+                        className={`py-3 text-sm font-data transition-colors ${
+                          lunchOn ? 'bg-rouge/10 text-rouge font-semibold' : 'bg-surface text-muted/40'
+                        }`}
+                      >{lunchOn ? '✓' : '·'}</button>
+                      <button
+                        onClick={() => toggleScheduleCell('dinner', dayVal)}
+                        className={`py-3 text-sm font-data transition-colors ${
+                          dinnerOn ? 'bg-rouge/10 text-rouge font-semibold' : 'bg-surface text-muted/40'
+                        }`}
+                      >{dinnerOn ? '✓' : '·'}</button>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => { setLunchDays(ALL_DAYS); setDinnerDays(ALL_DAYS); }}
+                  className="flex-1 py-2 rounded-lg border border-bordure text-xs font-data text-muted hover:text-noir"
+                >Tous</button>
+                <button
+                  type="button"
+                  onClick={() => { setLunchDays(ALL_DAYS); setDinnerDays([]); }}
+                  className="flex-1 py-2 rounded-lg border border-bordure text-xs font-data text-muted hover:text-noir"
+                >Tous les midis</button>
+                <button
+                  type="button"
+                  onClick={() => { setLunchDays([]); setDinnerDays([]); }}
+                  className="flex-1 py-2 rounded-lg border border-bordure text-xs font-data text-muted hover:text-noir"
+                >Rien</button>
               </div>
             </div>
             <div className="space-y-2">
@@ -241,20 +286,20 @@ export default function OnboardingPage() {
           <div className="space-y-4">
             <h2 className="font-titre text-xl text-noir">Combien à table ?</h2>
             <p className="text-xs text-muted">À partir de 1 personne — peu importe la taille de la brigade.</p>
-            {service === 'both' ? (
-              <div className="space-y-4">
+            <div className="space-y-4">
+              {hasLunch && (
                 <div>
                   <label className="block text-sm text-muted mb-2">Midi</label>
                   <input type="number" className="input text-lg text-center font-data" value={countLunch} onChange={(e) => setCountLunch(Math.max(1, parseInt(e.target.value) || 1))} min={1} autoFocus />
                 </div>
+              )}
+              {hasDinner && (
                 <div>
                   <label className="block text-sm text-muted mb-2">Soir</label>
-                  <input type="number" className="input text-lg text-center font-data" value={countDinner} onChange={(e) => setCountDinner(Math.max(1, parseInt(e.target.value) || 1))} min={1} />
+                  <input type="number" className="input text-lg text-center font-data" value={countDinner} onChange={(e) => setCountDinner(Math.max(1, parseInt(e.target.value) || 1))} min={1} autoFocus={!hasLunch} />
                 </div>
-              </div>
-            ) : (
-              <input type="number" className="input text-lg text-center font-data" value={countLunch} onChange={(e) => setCountLunch(Math.max(1, parseInt(e.target.value) || 1))} min={1} autoFocus />
-            )}
+              )}
+            </div>
             <div className="card">
               <p className="text-sm text-muted">Budget légal HCR : <span className="font-data">{BUDGET_HCR} €</span>/repas/pers</p>
               <p className="text-lg font-data text-noir mt-1">{budgetPreview().toFixed(0)} € / semaine</p>
@@ -292,7 +337,7 @@ export default function OnboardingPage() {
 
         {/* Step 4: Contraintes alimentaires (par nombre de personnes concernées) */}
         {step === 4 && (() => {
-          const total = service === 'both' ? countLunch + countDinner : countLunch;
+          const total = (hasLunch ? countLunch : 0) + (hasDinner ? countDinner : 0);
           return (
             <div className="space-y-4">
               <h2 className="font-titre text-xl text-noir">Des contraintes à table ?</h2>

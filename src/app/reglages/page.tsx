@@ -39,6 +39,7 @@ export default function ReglagesPage() {
   const [deliveryDays, setDeliveryDays] = useState<number[]>([]);
   const [planningDays, setPlanningDays] = useState(7);
   const [supplierId, setSupplierId] = useState<string | null>(null);
+  const [includeDessert, setIncludeDessert] = useState(true);
   // Map { contrainte: nombre de personnes concernées }. Une contrainte n'est active que si count > 0.
   const [constraintCounts, setConstraintCounts] = useState<Record<string, number>>({});
   const [constraintOther, setConstraintOther] = useState('');
@@ -57,6 +58,7 @@ export default function ReglagesPage() {
     if (est) {
       setName(est.name);
       setEmployeeCount(est.employee_count);
+      setIncludeDessert(est.include_dessert !== false); // default true si pas défini
       if (est.services?.includes('lunch') && est.services?.includes('dinner')) setService('both');
       else if (est.services?.includes('dinner')) setService('dinner');
       else setService('lunch');
@@ -136,7 +138,7 @@ export default function ReglagesPage() {
       await safeFetch('/api/establishment', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ name, employee_count: employeeCount, services, dietary_constraints: dietaryConstraints, dietary_counts: dietaryCounts, planning_days: planningDays }),
+        body: JSON.stringify({ name, employee_count: employeeCount, services, dietary_constraints: dietaryConstraints, dietary_counts: dietaryCounts, include_dessert: includeDessert, planning_days: planningDays }),
       }, 'Mise à jour de la maison');
 
       if (supplierId) {
@@ -209,6 +211,23 @@ export default function ReglagesPage() {
               {label}
             </button>
           ))}
+        </div>
+        <div className="pt-2 border-t border-bordure space-y-2">
+          <p className="text-sm text-noir">Un dessert à chaque repas ?</p>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={() => setIncludeDessert(true)}
+              className={`p-2.5 rounded-lg border text-sm font-medium transition-colors ${
+                includeDessert ? 'border-rouge text-noir font-medium' : 'border-bordure bg-surface text-muted'
+              }`}
+            >Oui</button>
+            <button
+              onClick={() => setIncludeDessert(false)}
+              className={`p-2.5 rounded-lg border text-sm font-medium transition-colors ${
+                !includeDessert ? 'border-rouge text-noir font-medium' : 'border-bordure bg-surface text-muted'
+              }`}
+            >Non</button>
+          </div>
         </div>
       </section>
 

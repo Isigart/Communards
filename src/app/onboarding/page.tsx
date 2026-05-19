@@ -36,6 +36,7 @@ export default function OnboardingPage() {
   const [countLunch, setCountLunch] = useState(4);
   const [countDinner, setCountDinner] = useState(2);
   const [orderDays, setOrderDays] = useState<number[]>([]);
+  const [includeDessert, setIncludeDessert] = useState(true);
   // Map { contrainte: nombre de personnes concernées }. Une contrainte n'est active que si count > 0.
   const [constraintCounts, setConstraintCounts] = useState<Record<string, number>>({});
   const [constraintOther, setConstraintOther] = useState('');
@@ -134,6 +135,7 @@ export default function OnboardingPage() {
           services,
           dietary_constraints: dietaryConstraints,
           dietary_counts: dietaryCounts,
+          include_dessert: includeDessert,
           supplier_name: 'Fournisseur principal',
           delivery_days: orderDays,
         }),
@@ -194,22 +196,42 @@ export default function OnboardingPage() {
           </div>
         )}
 
-        {/* Step 1: Services */}
+        {/* Step 1: Services + dessert */}
         {step === 1 && (
-          <div className="space-y-4">
-            <h2 className="font-titre text-xl text-noir">Quels services à nourrir ?</h2>
-            <div className="space-y-3">
-              {([['lunch', 'Déjeuner uniquement'], ['dinner', 'Dîner uniquement'], ['both', 'Les deux']] as [ServiceType, string][]).map(([value, label]) => (
+          <div className="space-y-6">
+            <div className="space-y-4">
+              <h2 className="font-titre text-xl text-noir">Quels services à nourrir ?</h2>
+              <div className="space-y-3">
+                {([['lunch', 'Déjeuner uniquement'], ['dinner', 'Dîner uniquement'], ['both', 'Les deux']] as [ServiceType, string][]).map(([value, label]) => (
+                  <button
+                    key={value}
+                    onClick={() => setService(value)}
+                    className={`w-full p-4 rounded-xl border text-left font-medium transition-colors ${
+                      service === value ? 'border-rouge text-noir font-medium' : 'border-bordure bg-surface text-muted'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="space-y-2">
+              <h3 className="font-titre text-base text-noir">Un dessert à chaque repas ?</h3>
+              <p className="text-xs text-muted">Yaourt, fruit, fromage… Si non, on s&apos;arrête à protéine + féculent + légume.</p>
+              <div className="grid grid-cols-2 gap-2">
                 <button
-                  key={value}
-                  onClick={() => setService(value)}
-                  className={`w-full p-4 rounded-xl border text-left font-medium transition-colors ${
-                    service === value ? 'border-rouge text-noir font-medium' : 'border-bordure bg-surface text-muted'
+                  onClick={() => setIncludeDessert(true)}
+                  className={`p-3 rounded-lg border font-medium text-sm transition-colors ${
+                    includeDessert ? 'border-rouge text-noir font-medium' : 'border-bordure bg-surface text-muted'
                   }`}
-                >
-                  {label}
-                </button>
-              ))}
+                >Oui</button>
+                <button
+                  onClick={() => setIncludeDessert(false)}
+                  className={`p-3 rounded-lg border font-medium text-sm transition-colors ${
+                    !includeDessert ? 'border-rouge text-noir font-medium' : 'border-bordure bg-surface text-muted'
+                  }`}
+                >Non</button>
+              </div>
             </div>
           </div>
         )}

@@ -33,6 +33,10 @@ export interface Establishment {
    * Quand false, chaque repas = protéine + féculent + légume (3 composants).
    */
   include_dessert: boolean;
+  /** Push notif "Pense à passer la commande" le matin du jour de livraison. Default: false. */
+  notify_order_day: boolean;
+  /** Push notif "Menu du jour" chaque matin. Default: false. */
+  notify_daily_menu: boolean;
   planning_days: number;
   created_at: string;
   updated_at: string;

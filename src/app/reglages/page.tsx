@@ -6,6 +6,7 @@ import { BUDGET_HCR } from '@/lib/types';
 import { computeSpanDefinitions } from '@/lib/spans';
 import { createBrowserClient } from '@/lib/supabase';
 import { getToken, fetchEstablishment, fetchSuppliers, invalidateEstablishment, invalidateSuppliers, invalidateSuggestions } from '@/lib/cache';
+import { subscribeToPush, unsubscribeFromPush, pushSupportStatus, type PushSupportStatus } from '@/lib/push-client';
 
 type SavingStep = 'idle' | 'updating' | 'configuring' | 'generating';
 
@@ -43,6 +44,11 @@ export default function ReglagesPage() {
   const [planningDays, setPlanningDays] = useState(7);
   const [supplierId, setSupplierId] = useState<string | null>(null);
   const [includeDessert, setIncludeDessert] = useState(true);
+  const [notifyOrderDay, setNotifyOrderDay] = useState(false);
+  const [notifyDailyMenu, setNotifyDailyMenu] = useState(false);
+  const [pushSupport, setPushSupport] = useState<PushSupportStatus>('supported');
+  const [notifBusy, setNotifBusy] = useState(false);
+  const [notifMsg, setNotifMsg] = useState<string | null>(null);
   // Map { contrainte: nombre de personnes concernées }. Une contrainte n'est active que si count > 0.
   const [constraintCounts, setConstraintCounts] = useState<Record<string, number>>({});
   const [constraintOther, setConstraintOther] = useState('');
@@ -62,6 +68,9 @@ export default function ReglagesPage() {
       setName(est.name);
       setEmployeeCount(est.employee_count);
       setIncludeDessert(est.include_dessert !== false); // default true si pas défini
+      setNotifyOrderDay(est.notify_order_day === true);
+      setNotifyDailyMenu(est.notify_daily_menu === true);
+      setPushSupport(pushSupportStatus());
       // Charger lunch_days / dinner_days (source de vérité). Fallback : déduire de services (legacy).
       if (est.lunch_days || est.dinner_days) {
         setLunchDays(est.lunch_days || []);
@@ -108,6 +117,81 @@ export default function ReglagesPage() {
     );
   };
 
+  /**
+   * Toggle dédié aux notifications — sauvegarde IMMÉDIATE (pas besoin de cliquer "Enregistrer et regenerer").
+   * Activer = demande la permission + souscrit + persiste le flag.
+   * Désactiver = juste persiste le flag (on garde la subscription pour éviter de redemander la permission).
+   */
+  async function toggleNotification(kind: 'order_day' | 'daily_menu', enable: boolean) {
+    if (!token) return;
+    setNotifBusy(true);
+    setNotifMsg(null);
+
+    try {
+      if (enable) {
+        const support = pushSupportStatus();
+        if (support === 'ios-needs-install') {
+          setNotifMsg('Sur iOS, ajoute d\'abord l\'app à l\'écran d\'accueil (bouton Partage → "Sur l\'écran d\'accueil"), puis reviens ici.');
+          return;
+        }
+        if (support !== 'supported') {
+          setNotifMsg('Notifications non supportées par ce navigateur.');
+          return;
+        }
+
+        const sub = await subscribeToPush();
+        if (!sub) {
+          setNotifMsg(
+            typeof Notification !== 'undefined' && Notification.permission === 'denied'
+              ? 'Notifications bloquées par le navigateur. Réactive-les dans les paramètres du site, puis reviens.'
+              : 'Permission refusée.'
+          );
+          return;
+        }
+
+        const subRes = await fetch('/api/push/subscribe', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ subscription: sub }),
+        });
+        if (!subRes.ok) {
+          setNotifMsg('Impossible de sauvegarder la souscription côté serveur.');
+          return;
+        }
+      }
+
+      const fieldName = kind === 'order_day' ? 'notify_order_day' : 'notify_daily_menu';
+      const res = await fetch('/api/establishment', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ [fieldName]: enable }),
+      });
+      if (!res.ok) {
+        setNotifMsg('Impossible de sauvegarder la préférence.');
+        return;
+      }
+
+      if (kind === 'order_day') setNotifyOrderDay(enable);
+      else setNotifyDailyMenu(enable);
+      invalidateEstablishment();
+      setNotifMsg(enable ? 'Notification activée ✓' : 'Notification désactivée');
+
+      // Si on désactive les DEUX, on peut aussi supprimer la subscription pour propreté
+      if (!enable && !notifyOrderDay && !notifyDailyMenu) {
+        const endpoint = await unsubscribeFromPush();
+        if (endpoint) {
+          await fetch('/api/push/unsubscribe', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ endpoint }),
+          });
+        }
+      }
+    } finally {
+      setNotifBusy(false);
+    }
+  }
+
   const setConstraintCount = (value: string, count: number, max: number) => {
     const clamped = Math.max(0, Math.min(max, count));
     setConstraintCounts((prev) => {
@@ -153,7 +237,7 @@ export default function ReglagesPage() {
       await safeFetch('/api/establishment', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ name, employee_count: employeeCount, services, lunch_days: lunchDays, dinner_days: dinnerDays, dietary_constraints: dietaryConstraints, dietary_counts: dietaryCounts, include_dessert: includeDessert, planning_days: planningDays }),
+        body: JSON.stringify({ name, employee_count: employeeCount, services, lunch_days: lunchDays, dinner_days: dinnerDays, dietary_constraints: dietaryConstraints, dietary_counts: dietaryCounts, include_dessert: includeDessert, notify_order_day: notifyOrderDay, notify_daily_menu: notifyDailyMenu, planning_days: planningDays }),
       }, 'Mise à jour de la maison');
 
       if (supplierId) {
@@ -390,6 +474,68 @@ export default function ReglagesPage() {
             <span className="text-xs text-muted w-10 text-right font-data">/ {employeeCount}</span>
           </div>
         </div>
+      </section>
+
+      <section className="card space-y-3">
+        <h2 className="font-titre text-sm text-noir">Notifications</h2>
+        <p className="text-xs text-muted">
+          On t&apos;envoie une notif uniquement quand t&apos;en as besoin. Tu actives ce que tu veux, on ne spamme pas.
+        </p>
+
+        {pushSupport === 'ios-needs-install' && (
+          <div className="text-xs text-noir bg-rouge/5 border border-rouge/30 rounded-lg p-2">
+            📱 Sur iPhone, ajoute d&apos;abord l&apos;app à l&apos;écran d&apos;accueil (Safari → bouton Partage → &laquo;&nbsp;Sur l&apos;écran d&apos;accueil&nbsp;&raquo;), puis ouvre-la depuis cette icône.
+          </div>
+        )}
+        {pushSupport === 'unsupported-browser' && (
+          <div className="text-xs text-muted bg-bordure/40 rounded-lg p-2">
+            Ton navigateur ne supporte pas les notifications push.
+          </div>
+        )}
+
+        <div className={`flex items-start gap-3 p-3 rounded-lg border ${notifyOrderDay ? 'border-rouge bg-rouge/5' : 'border-bordure bg-surface'}`}>
+          <div className="flex-1">
+            <div className="text-sm text-noir font-medium">Rappel jour de commande</div>
+            <p className="text-xs text-muted mt-0.5">Le matin du jour de livraison fournisseur, on t&apos;envoie une notif pour penser à passer la commande.</p>
+          </div>
+          <button
+            type="button"
+            disabled={notifBusy || pushSupport !== 'supported'}
+            onClick={() => toggleNotification('order_day', !notifyOrderDay)}
+            className={`shrink-0 w-12 h-7 rounded-full transition-colors relative ${
+              notifyOrderDay ? 'bg-rouge' : 'bg-bordure'
+            } disabled:opacity-50`}
+            aria-pressed={notifyOrderDay}
+          >
+            <span className={`absolute top-0.5 w-6 h-6 rounded-full bg-papier transition-transform ${
+              notifyOrderDay ? 'translate-x-[22px]' : 'translate-x-0.5'
+            }`} />
+          </button>
+        </div>
+
+        <div className={`flex items-start gap-3 p-3 rounded-lg border ${notifyDailyMenu ? 'border-rouge bg-rouge/5' : 'border-bordure bg-surface'}`}>
+          <div className="flex-1">
+            <div className="text-sm text-noir font-medium">Menu du jour</div>
+            <p className="text-xs text-muted mt-0.5">Chaque matin, un récap des repas prévus aujourd&apos;hui (midi + soir si tu en as).</p>
+          </div>
+          <button
+            type="button"
+            disabled={notifBusy || pushSupport !== 'supported'}
+            onClick={() => toggleNotification('daily_menu', !notifyDailyMenu)}
+            className={`shrink-0 w-12 h-7 rounded-full transition-colors relative ${
+              notifyDailyMenu ? 'bg-rouge' : 'bg-bordure'
+            } disabled:opacity-50`}
+            aria-pressed={notifyDailyMenu}
+          >
+            <span className={`absolute top-0.5 w-6 h-6 rounded-full bg-papier transition-transform ${
+              notifyDailyMenu ? 'translate-x-[22px]' : 'translate-x-0.5'
+            }`} />
+          </button>
+        </div>
+
+        {notifMsg && (
+          <p className="text-xs text-noir/70">{notifMsg}</p>
+        )}
       </section>
 
       <section className="card space-y-3">
